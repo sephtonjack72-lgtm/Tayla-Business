@@ -235,29 +235,51 @@
         </div>
         
         <div style="margin-top:16px;">
-          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;display:block;">Debit Entries (What receives value)</label>
+          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:6px;display:block;">Debit Entries <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);">— what receives value (asset ↑, expense ↑)</span></label>
+          <div style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:4px;padding:0 2px;">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Account</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Amount (DR)</span>
+            <span></span>
+          </div>
           <div id="tx-debit-lines">
             <div class="tx-line" style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;">
               <select id="tx-debit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
                 <option value="">Select Account...</option>
               </select>
-              <input type="number" id="tx-debit-amount-0" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
-              <button class="btn btn-ghost btn-sm" onclick="addTxLine('debit')" style="padding:4px 8px;">+</button>
+              <input type="number" id="tx-debit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+              <button class="btn btn-ghost btn-sm" onclick="addTxLine('debit')" title="Add another debit line" style="padding:4px 8px;">+</button>
             </div>
           </div>
+          <button class="btn btn-ghost btn-sm" onclick="addTxLine('debit')" style="width:100%;border:1.5px dashed var(--border);font-size:12px;margin-top:2px;">+ Add Debit Line</button>
         </div>
         
-        <div style="margin-top:12px;">
-          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;display:block;">Credit Entries (What gives value)</label>
+        <div style="margin-top:14px;">
+          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:6px;display:block;">Credit Entries <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);">— what gives value (liability ↑, revenue ↑, asset ↓)</span></label>
+          <div style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:4px;padding:0 2px;">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Account</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Amount (CR)</span>
+            <span></span>
+          </div>
           <div id="tx-credit-lines">
             <div class="tx-line" style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;">
               <select id="tx-credit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
                 <option value="">Select Account...</option>
               </select>
-              <input type="number" id="tx-credit-amount-0" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
-              <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" style="padding:4px 8px;">+</button>
+              <input type="number" id="tx-credit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+              <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" title="Add another credit line" style="padding:4px 8px;">+</button>
             </div>
           </div>
+          <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" style="width:100%;border:1.5px dashed var(--border);font-size:12px;margin-top:2px;">+ Add Credit Line</button>
+        </div>
+
+        <div style="margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
+          <strong>Tip — multiple lines:</strong> Click <em>+ Add Debit/Credit Line</em> for split entries. e.g. buying a vehicle on finance:
+          <span style="display:block;margin-top:5px;padding-left:8px;border-left:2px solid var(--accent2);font-family:'DM Mono',monospace;font-size:11px;">
+            DR &nbsp;1500 Plant &amp; Equipment &nbsp;&nbsp;$33,000<br>
+            CR &nbsp;1030 GST Receivable &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$3,000<br>
+            CR &nbsp;2100 Loans Payable &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$27,000<br>
+            CR &nbsp;1010 Cash at Bank &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$3,000
+          </span>
         </div>
         
         <div id="tx-validation" style="margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;display:none;"></div>
@@ -356,11 +378,26 @@
         </div>
         
         <div style="margin-top:16px;">
-          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;display:block;">Journal Lines</label>
+          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:6px;display:block;">Journal Lines</label>
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 40px;gap:8px;margin-bottom:4px;padding:0 2px;">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Account</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Debit (DR)</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Credit (CR)</span>
+            <span></span>
+          </div>
           <div id="journal-lines">
             <!-- Dynamic lines inserted here -->
           </div>
           <button class="btn btn-ghost btn-sm mt" onclick="addJournalLine()" style="width:100%;border:1.5px dashed var(--border);">+ Add Line</button>
+          <div style="margin-top:10px;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
+            <strong>Tip — multiple lines:</strong> Add as many lines as needed — debits and credits just need to balance. e.g. buying a vehicle on finance:
+            <span style="display:block;margin-top:5px;padding-left:8px;border-left:2px solid var(--accent2);font-family:'DM Mono',monospace;font-size:11px;">
+              DR &nbsp;1500 Plant &amp; Equipment &nbsp;&nbsp;$33,000<br>
+              CR &nbsp;1030 GST Receivable &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$3,000<br>
+              CR &nbsp;2100 Loans Payable &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$27,000<br>
+              CR &nbsp;1010 Cash at Bank &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$3,000
+            </span>
+          </div>
         </div>
         
         <div id="journal-validation" style="margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;display:none;"></div>
@@ -1900,14 +1937,56 @@ function selectLedgerAccount(accountId) {
 function gstAmount(tx) { return tx.gst === 'yes' ? +(tx.amount / 11).toFixed(2) : 0; }
 function exGST(tx) { return tx.gst === 'yes' ? +(tx.amount - gstAmount(tx)).toFixed(2) : tx.amount; }
 
+// Build ledger balances for ALL time (no date filter) from every entry source
+function buildAllTimeLedgerBalances() {
+  const bal = {};
+  ALL_ACCOUNTS.forEach(a => bal[a.id] = 0);
+
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (bal[d.account] !== undefined) bal[d.account] += d.amount; });
+      t.credits.forEach(c => { if (bal[c.account] !== undefined) bal[c.account] -= c.amount; });
+    } else {
+      // Legacy single-entry
+      const gstAmt = t.gst === 'yes' ? t.amount / 11 : 0;
+      const netAmt = t.amount - gstAmt;
+      let accId = '5010';
+      if (t.type === 'income') accId = '4010';
+      else if (t.type === 'expense' && t.category && t.category.includes('Software')) accId = '5020';
+      else if (t.type === 'expense' && t.category && t.category.includes('Hosting')) accId = '5030';
+      else if (t.type === 'expense' && t.category && t.category.includes('Setup')) accId = '5080';
+      else if (t.type === 'expense' && t.category && t.category.includes('Domain')) accId = '5090';
+      else if (t.type === 'drawings') accId = '3020';
+      else if (t.type === 'capital') accId = '3010';
+      if (t.type === 'income') {
+        bal['1010'] += t.amount; bal[accId] -= t.amount;
+        if (gstAmt > 0) bal['2020'] -= gstAmt;
+      } else if (t.type === 'expense') {
+        bal[accId] += netAmt; bal['1010'] -= t.amount;
+        if (gstAmt > 0) bal['1030'] += gstAmt;
+      } else if (t.type === 'drawings') {
+        bal['3020'] += t.amount; bal['1010'] -= t.amount;
+      } else if (t.type === 'capital') {
+        bal['1010'] += t.amount; bal['3010'] -= t.amount;
+      }
+    }
+  });
+
+  journals.forEach(j => {
+    j.lines.forEach(l => { if (bal[l.accountId] !== undefined) bal[l.accountId] += l.debit - l.credit; });
+  });
+
+  return bal;
+}
+
+// Derive summary totals from ledger balances
 function totals() {
+  const bal = buildAllTimeLedgerBalances();
   let income = 0, expenses = 0, capital = 0, drawings = 0;
-  for (const t of transactions) {
-    if (t.type === 'income') income += t.amount;
-    else if (t.type === 'expense') expenses += t.amount;
-    else if (t.type === 'capital') capital += t.amount;
-    else if (t.type === 'drawings') drawings += t.amount;
-  }
+  getAccountsByType('revenue').forEach(a => income += -(bal[a.id] || 0));
+  getAccountsByType('expense').forEach(a => expenses += (bal[a.id] || 0));
+  capital  = -(bal['3010'] || 0);
+  drawings =  (bal['3020'] || 0);
   return { income, expenses, capital, drawings, netProfit: income - expenses };
 }
 
@@ -1920,13 +1999,39 @@ function quarter(dateStr) {
   return 'Q4';
 }
 
+// Build quarterly revenue/expense breakdown from all entry sources
 function quarterlyTotals() {
   const q = { Q1: { income: 0, expenses: 0 }, Q2: { income: 0, expenses: 0 }, Q3: { income: 0, expenses: 0 }, Q4: { income: 0, expenses: 0 } };
-  for (const t of transactions) {
-    const qk = quarter(t.date);
-    if (t.type === 'income') q[qk].income += t.amount;
-    else if (t.type === 'expense') q[qk].expenses += t.amount;
-  }
+
+  function addRevenue(dateStr, amount) { q[quarter(dateStr)].income += amount; }
+  function addExpense(dateStr, amount) { q[quarter(dateStr)].expenses += amount; }
+
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      // For double-entry: check if any credit goes to revenue account (4xxx) or debit to expense (5xxx)
+      t.credits.forEach(c => {
+        const acc = getAccount(c.account);
+        if (acc && acc.type === 'revenue') addRevenue(t.date, c.amount);
+      });
+      t.debits.forEach(d => {
+        const acc = getAccount(d.account);
+        if (acc && acc.type === 'expense') addExpense(t.date, d.amount);
+      });
+    } else {
+      if (t.type === 'income') addRevenue(t.date, t.amount);
+      else if (t.type === 'expense') addExpense(t.date, t.amount);
+    }
+  });
+
+  journals.forEach(j => {
+    j.lines.forEach(l => {
+      const acc = getAccount(l.accountId);
+      if (!acc) return;
+      if (acc.type === 'revenue' && l.credit > 0) addRevenue(j.date, l.credit);
+      if (acc.type === 'expense' && l.debit > 0)  addExpense(j.date, l.debit);
+    });
+  });
+
   return q;
 }
 
@@ -1963,7 +2068,7 @@ function renderKPIs() {
   const t = totals();
   const swMRRTotal = portfolioMRR();
   document.getElementById('kpi-strip').innerHTML = `
-    <div class="kpi"><div class="kpi-label">Transactions Revenue</div><div class="kpi-value positive">${fmt(t.income)}</div></div>
+    <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value positive">${fmt(t.income)}</div></div>
     <div class="kpi"><div class="kpi-label">Portfolio MRR</div><div class="kpi-value positive">${fmt(swMRRTotal)}</div></div>
     <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value negative">${fmt(t.expenses)}</div></div>
     <div class="kpi"><div class="kpi-label">Net Profit / (Loss)</div><div class="kpi-value ${t.netProfit >= 0 ? 'positive' : 'negative'}">${fmt(t.netProfit)}</div></div>
