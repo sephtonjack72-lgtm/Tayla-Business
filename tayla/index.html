@@ -375,7 +375,7 @@
       <div class="card-body" style="padding:0;">
         <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
           <table id="journals-table">
-            <thead><tr><th>Date</th><th>Ref</th><th>Narration</th><th>Total</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Date</th><th>Ref</th><th>Narration / Account</th><th>Total</th><th>Debit</th><th>Credit</th><th>Actions</th></tr></thead>
             <tbody id="journals-tbody"></tbody>
           </table>
         </div>
@@ -1446,27 +1446,79 @@ function saveJournal() {
 }
 
 function renderJournals() {
-  const totalDebits = journals.reduce((sum, j) => sum + j.total, 0);
-  document.getElementById('journal-count').textContent = journals.length;
+  // Compute totals across all sources (journals + double-entry transactions)
+  let totalDebits = 0, totalCredits = 0, entryCount = 0;
+
+  journals.forEach(j => {
+    j.lines.forEach(l => { totalDebits += l.debit; totalCredits += l.credit; });
+    entryCount++;
+  });
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => totalDebits += d.amount);
+      t.credits.forEach(c => totalCredits += c.amount);
+      entryCount++;
+    }
+  });
+
+  document.getElementById('journal-count').textContent = entryCount;
   document.getElementById('journal-debits').textContent = fmt(totalDebits);
-  document.getElementById('journal-credits').textContent = fmt(totalDebits);
-  document.getElementById('journal-balance').textContent = '$0.00';
-  
+  document.getElementById('journal-credits').textContent = fmt(totalCredits);
+  document.getElementById('journal-balance').textContent = fmt(Math.abs(totalDebits - totalCredits));
+
   const tbody = document.getElementById('journals-tbody');
-  if (journals.length === 0) {
+
+  // Build combined list of all journal entries sorted by date desc
+  const allEntries = [];
+
+  // From journals array
+  journals.forEach(j => {
+    allEntries.push({ date: j.date, ref: j.ref, narration: j.narration, total: j.total, id: j.id, source: 'journal',
+      lines: j.lines.map(l => ({ account: l.accountId, accountName: l.accountName || getAccount(l.accountId)?.name || l.accountId, debit: l.debit, credit: l.credit }))
+    });
+  });
+
+  // From double-entry transactions
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      const lines = [
+        ...t.debits.map(d => ({ account: d.account, accountName: getAccount(d.account)?.name || d.account, debit: d.amount, credit: 0 })),
+        ...t.credits.map(c => ({ account: c.account, accountName: getAccount(c.account)?.name || c.account, debit: 0, credit: c.amount }))
+      ];
+      allEntries.push({ date: t.date, ref: t.ref, narration: t.desc, total: t.amount, id: t.id, source: 'transaction', lines });
+    }
+  });
+
+  allEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (allEntries.length === 0) {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3);">No journal entries yet</td></tr>';
     return;
   }
-  
-  tbody.innerHTML = journals.map(j => `
-    <tr>
-      <td>${fmtDate(j.date)}</td>
-      <td><span class="mono" style="font-weight:600;">${j.ref}</span></td>
-      <td>${j.narration}</td>
-      <td class="mono">${fmt(j.total)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button></td>
-    </tr>
-  `).join('');
+
+  tbody.innerHTML = allEntries.map(j => {
+    const lineRows = j.lines.map((l, i) => `
+      <tr style="background:var(--surface2);">
+        <td colspan="2" style="padding:4px 14px 4px ${i === 0 ? '32px' : '48px'};font-size:12px;color:var(--text2);">
+          ${l.account} — ${l.accountName}
+        </td>
+        <td style="padding:4px 14px;font-size:12px;" colspan="1"></td>
+        <td class="mono" style="padding:4px 14px;font-size:12px;color:${l.debit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.debit > 0 ? fmt(l.debit) : '—'}</td>
+        <td class="mono" style="padding:4px 14px;font-size:12px;color:${l.credit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.credit > 0 ? fmt(l.credit) : '—'}</td>
+        <td></td>
+      </tr>`).join('');
+
+    return `
+      <tr style="border-top:2px solid var(--border);">
+        <td><strong>${fmtDate(j.date)}</strong></td>
+        <td><span class="mono" style="font-weight:600;">${j.ref}</span></td>
+        <td style="font-style:italic;color:var(--text2);">${j.narration}</td>
+        <td class="mono" colspan="2" style="font-weight:600;">${fmt(j.total)}</td>
+        <td>${j.source === 'journal' ? `<button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button>` : `<button class="btn btn-danger btn-sm" onclick="deleteTx('${j.id}')">✕</button>`}</td>
+      </tr>
+      ${lineRows}
+    `;
+  }).join('');
 }
 
 function deleteJournal(id) {
@@ -1796,13 +1848,66 @@ function fyFilter(txList) {
   return txList.filter(t => { const d = new Date(t.date); return d >= start && d <= end; });
 }
 
-function groupByCategoryFiltered(type) {
-  const map = {};
-  for (const t of fyFilter(transactions)) {
-    if (t.type !== type) continue;
-    map[t.category] = (map[t.category] || 0) + t.amount;
+// Build ledger balances for a given FY from ALL entry sources
+function buildLedgerBalancesForFY(fyVal) {
+  const fy = parseInt(fyVal || '2026');
+  const start = new Date(`${fy-1}-07-01`);
+  const end   = new Date(`${fy}-06-30`);
+
+  const balances = {};
+  ALL_ACCOUNTS.forEach(a => balances[a.id] = 0);
+
+  function inFY(dateStr) {
+    const d = new Date(dateStr);
+    return d >= start && d <= end;
   }
-  return map;
+
+  // Process double-entry transactions (type === 'journal')
+  transactions.forEach(t => {
+    if (!inFY(t.date)) return;
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (balances[d.account] !== undefined) balances[d.account] += d.amount; });
+      t.credits.forEach(c => { if (balances[c.account] !== undefined) balances[c.account] -= c.amount; });
+    } else {
+      // Legacy single-entry transactions — map to accounts
+      const gstAmt = t.gst === 'yes' ? t.amount / 11 : 0;
+      const netAmt = t.amount - gstAmt;
+      let accId = '5010';
+      if (t.type === 'income') accId = '4010';
+      else if (t.type === 'expense' && t.category && t.category.includes('Software')) accId = '5020';
+      else if (t.type === 'expense' && t.category && t.category.includes('Hosting')) accId = '5030';
+      else if (t.type === 'expense' && (t.category && t.category.includes('Setup'))) accId = '5080';
+      else if (t.type === 'expense' && t.category && t.category.includes('Domain')) accId = '5090';
+      else if (t.type === 'drawings') accId = '3020';
+      else if (t.type === 'capital') accId = '3010';
+
+      if (t.type === 'income') {
+        balances['1010'] = (balances['1010'] || 0) + t.amount;
+        balances[accId] = (balances[accId] || 0) - t.amount;
+        if (gstAmt > 0) balances['2020'] = (balances['2020'] || 0) - gstAmt;
+      } else if (t.type === 'expense') {
+        balances[accId] = (balances[accId] || 0) + netAmt;
+        balances['1010'] = (balances['1010'] || 0) - t.amount;
+        if (gstAmt > 0) balances['1030'] = (balances['1030'] || 0) + gstAmt;
+      } else if (t.type === 'drawings') {
+        balances['3020'] = (balances['3020'] || 0) + t.amount;
+        balances['1010'] = (balances['1010'] || 0) - t.amount;
+      } else if (t.type === 'capital') {
+        balances['1010'] = (balances['1010'] || 0) + t.amount;
+        balances['3010'] = (balances['3010'] || 0) - t.amount;
+      }
+    }
+  });
+
+  // Process general journals
+  journals.forEach(j => {
+    if (!inFY(j.date)) return;
+    j.lines.forEach(l => {
+      if (balances[l.accountId] !== undefined) balances[l.accountId] += l.debit - l.credit;
+    });
+  });
+
+  return balances;
 }
 
 function totalsFiltered() {
@@ -1817,22 +1922,6 @@ function totalsFiltered() {
 }
 
 function renderIncomeStatement() {
-  const incCats = groupByCategoryFiltered('income');
-  const expCats = groupByCategoryFiltered('expense');
-  const t = totalsFiltered();
-
-  const opExpCats = ['Marketing & Advertising', 'Software Subscriptions', 'Hosting & Infrastructure', 'Other Expense'];
-  const setupCats = ['Business Setup', 'Domain Purchase', 'Business Name Registration'];
-
-  let opTotal = 0, setupTotal = 0;
-  opExpCats.forEach(c => opTotal += expCats[c] || 0);
-  setupCats.forEach(c => setupTotal += expCats[c] || 0);
-
-  let otherExpTotal = 0;
-  Object.keys(expCats).forEach(c => {
-    if (!opExpCats.includes(c) && !setupCats.includes(c)) otherExpTotal += expCats[c];
-  });
-
   const entity = document.getElementById('entity-name')?.value || 'Tayla';
   const fyVal = document.getElementById('is-fy')?.value || '2026';
   document.getElementById('is-period').textContent = `For the year ending 30 June ${fyVal}`;
@@ -1840,45 +1929,63 @@ function renderIncomeStatement() {
   const fy = parseInt(fyVal);
   const fyStart = new Date(`${fy-1}-07-01`);
   const fyEnd   = new Date(`${fy}-06-30`);
+
+  // Get balances from ALL entries (transactions + journals)
+  const balances = buildLedgerBalancesForFY(fyVal);
+
+  // Revenue accounts (4xxx) — credit-normal, so balance is negative in our DR system → revenue = -balance
+  const revenueAccounts = getAccountsByType('revenue');
+  let totalRevenue = 0;
+  const revenueLines = [];
+  revenueAccounts.forEach(a => {
+    const val = -(balances[a.id] || 0); // credit-normal
+    if (val !== 0) {
+      revenueLines.push({ name: `${a.id} ${a.name}`, value: val });
+      totalRevenue += val;
+    }
+  });
+
+  // Software MRR income (user-configured)
   const swIncomeLines = getSoftwareIncomeLines(fyStart, fyEnd);
   const swIncomeTotal = Object.values(swIncomeLines).reduce((s,v)=>s+v,0);
-  const totalRevenue = t.income + swIncomeTotal;
+  totalRevenue += swIncomeTotal;
+
+  // Expense accounts (5xxx) — debit-normal, so balance is positive
+  const expenseAccounts = getAccountsByType('expense');
+  let totalExpenses = 0;
+  const expenseLines = [];
+  expenseAccounts.forEach(a => {
+    const val = balances[a.id] || 0; // debit-normal
+    if (val !== 0) {
+      expenseLines.push({ name: `${a.id} ${a.name}`, value: val });
+      totalExpenses += val;
+    }
+  });
+
+  const netProfit = totalRevenue - totalExpenses;
 
   document.getElementById('income-statement-body').innerHTML = `
     <div style="margin-bottom:16px;">
       <div style="font-family:'DM Serif Display',serif;font-size:22px;">${entity}</div>
       <div style="font-size:13px;color:var(--text2);">Income Statement — Year ending 30 June ${fyVal}</div>
-      <div style="font-size:12px;color:var(--text3);">All figures in AUD (excl. GST unless noted)</div>
+      <div style="font-size:12px;color:var(--text3);">Derived from all journal entries and transactions · All figures in AUD</div>
     </div>
 
     <div class="section-title">Revenue</div>
-    ${Object.keys(incCats).length ? Object.entries(incCats).map(([c,v]) => row(c, v)).join('') : ''}
+    ${revenueLines.length ? revenueLines.map(l => row(l.name, l.value, true)).join('') : ''}
     ${Object.keys(swIncomeLines).length ? Object.entries(swIncomeLines).map(([c,v]) => row(c, v, true)).join('') : ''}
     ${totalRevenue === 0 ? row('No revenue recorded', 0) : ''}
     ${rowTotal('Total Revenue', totalRevenue, true)}
 
     <div style="margin-top:20px;"></div>
     <div class="section-title">Expenses</div>
-
-    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Operating Expenses</div>
-    ${opExpCats.map(c => expCats[c] ? row(c, expCats[c]) : '').join('')}
-    ${rowTotal('Total Operating Expenses', opTotal)}
-
-    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Business Setup Costs</div>
-    ${setupCats.map(c => expCats[c] ? row(c, expCats[c]) : '').join('')}
-    ${rowTotal('Total Setup Costs', setupTotal)}
-
-    ${otherExpTotal > 0 ? `
-    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Other</div>
-    ${Object.entries(expCats).filter(([c]) => !opExpCats.includes(c) && !setupCats.includes(c)).map(([c,v]) => row(c,v)).join('')}
-    ${rowTotal('Total Other', otherExpTotal)}` : ''}
-
-    ${rowTotal('Total Expenses', t.expenses)}
+    ${expenseLines.length ? expenseLines.map(l => row(l.name, l.value)).join('') : row('No expenses recorded', 0)}
+    ${rowTotal('Total Expenses', totalExpenses)}
 
     <div style="margin-top:16px;"></div>
     <div class="statement row grand-total">
       <span>Net Profit / (Loss) Before Tax</span>
-      <span class="amount ${(totalRevenue - t.expenses) >= 0 ? 'positive' : 'negative'}">${fmtAmt(totalRevenue - t.expenses)}</span>
+      <span class="amount ${netProfit >= 0 ? 'positive' : 'negative'}">${fmtAmt(netProfit)}</span>
     </div>
   `;
 }
@@ -1896,87 +2003,198 @@ function row(label, value, positive = false) {
 
 // ── BALANCE SHEET ──
 function renderBalanceSheet() {
-  const t = totals();
-  const bank = t.capital - t.expenses - t.drawings + t.income;
+  // Build ALL-TIME balances (balance sheet is as-at, not period-limited)
+  const balances = {};
+  ALL_ACCOUNTS.forEach(a => balances[a.id] = 0);
 
+  // Process all transactions
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (balances[d.account] !== undefined) balances[d.account] += d.amount; });
+      t.credits.forEach(c => { if (balances[c.account] !== undefined) balances[c.account] -= c.amount; });
+    } else {
+      const gstAmt = t.gst === 'yes' ? t.amount / 11 : 0;
+      const netAmt = t.amount - gstAmt;
+      let accId = '5010';
+      if (t.type === 'income') accId = '4010';
+      else if (t.type === 'expense' && t.category && t.category.includes('Software')) accId = '5020';
+      else if (t.type === 'expense' && t.category && t.category.includes('Hosting')) accId = '5030';
+      else if (t.type === 'expense' && t.category && t.category.includes('Setup')) accId = '5080';
+      else if (t.type === 'expense' && t.category && t.category.includes('Domain')) accId = '5090';
+      else if (t.type === 'drawings') accId = '3020';
+      else if (t.type === 'capital') accId = '3010';
+
+      if (t.type === 'income') {
+        balances['1010'] += t.amount; balances[accId] -= t.amount;
+        if (gstAmt > 0) balances['2020'] -= gstAmt;
+      } else if (t.type === 'expense') {
+        balances[accId] += netAmt; balances['1010'] -= t.amount;
+        if (gstAmt > 0) balances['1030'] += gstAmt;
+      } else if (t.type === 'drawings') {
+        balances['3020'] += t.amount; balances['1010'] -= t.amount;
+      } else if (t.type === 'capital') {
+        balances['1010'] += t.amount; balances['3010'] -= t.amount;
+      }
+    }
+  });
+
+  // Process all journals
+  journals.forEach(j => {
+    j.lines.forEach(l => {
+      if (balances[l.accountId] !== undefined) balances[l.accountId] += l.debit - l.credit;
+    });
+  });
+
+  // Helper: get asset/liability account value (debit-normal for assets, credit-normal for liabilities)
+  // Assets: positive balance = DR = asset
+  // Liabilities: negative balance (in DR system) = CR = liability; flip sign for display
+  // Equity: negative balance (in DR system) = CR = equity; flip sign for display
+  // Revenue: negative = CR = revenue
+  // Expenses: positive = DR = expense
+
+  // Compute Net Profit from Revenue/Expense accounts
+  let totalRevLedger = 0, totalExpLedger = 0;
+  getAccountsByType('revenue').forEach(a => totalRevLedger += -(balances[a.id] || 0));
+  getAccountsByType('expense').forEach(a => totalExpLedger += (balances[a.id] || 0));
+  const netProfitLedger = totalRevLedger - totalExpLedger;
+
+  // Asset accounts (debit-normal)
+  const assetAccounts = getAccountsByType('asset');
+  const cashBal = balances['1010'] || 0; // debit-normal
+  const arBal   = balances['1020'] || 0;
+  const gstRecBal = balances['1030'] || 0;
+  const invBal  = balances['1100'] || 0;
+  const ppeBal  = balances['1500'] || 0;
+  const accDepBal = balances['1510'] || 0; // contra asset — debit reduces it, credit is the provision
+  const intanBal = balances['1600'] || 0;
+
+  // Manually-entered assets from the assets panel (supplement ledger)
   const ppe        = assets.filter(a => a.type === 'ppe');
-  const current    = assets.filter(a => a.type === 'current');
+  const currentA   = assets.filter(a => a.type === 'current');
   const intangible = assets.filter(a => a.type === 'intangible');
   const ppeTotal        = ppe.reduce((s, a) => s + a.value, 0);
-  const currentTotal    = current.reduce((s, a) => s + a.value, 0);
+  const currentTotal    = currentA.reduce((s, a) => s + a.value, 0);
   const intangibleTotal = intangible.reduce((s, a) => s + a.value, 0);
-  const totalAssets = bank + ppeTotal + currentTotal + intangibleTotal;
 
-  const currentLiabs   = liabilities.filter(l => l.type === 'current');
+  // Current assets from ledger
+  const currentAssetsLedger = cashBal + arBal + gstRecBal + invBal;
+  // Non-current from ledger
+  const ppeNetLedger = ppeBal - Math.abs(accDepBal); // net of accumulated depreciation
+  const intanLedger = intanBal;
+
+  const totalCurrentAssets = currentAssetsLedger + currentTotal;
+  const totalPPE = ppeNetLedger + ppeTotal;
+  const totalIntangible = intanLedger + intangibleTotal;
+  const totalAssets = totalCurrentAssets + totalPPE + totalIntangible;
+
+  // Liability accounts (credit-normal → negative in DR system → display as positive)
+  const apBal    = -(balances['2010'] || 0);
+  const gstPayBal = -(balances['2020'] || 0);
+  const paygBal  = -(balances['2030'] || 0);
+  const superBal = -(balances['2040'] || 0);
+  const loanBal  = -(balances['2100'] || 0);
+  const annLeaveBal = -(balances['2200'] || 0);
+
+  // Manually-entered liabilities
+  const currentLiabs    = liabilities.filter(l => l.type === 'current');
   const nonCurrentLiabs = liabilities.filter(l => l.type === 'non-current');
   const currentLiabTotal    = currentLiabs.reduce((s, l) => s + l.value, 0);
   const nonCurrentLiabTotal = nonCurrentLiabs.reduce((s, l) => s + l.value, 0);
-  const totalLiabilities = currentLiabTotal + nonCurrentLiabTotal;
 
+  // Ledger-derived current liabilities
+  const ledgerCurrentLiabs = apBal + gstPayBal + paygBal + superBal + annLeaveBal;
+  const ledgerNonCurrentLiabs = loanBal;
+
+  const totalCurrentLiabs = ledgerCurrentLiabs + currentLiabTotal;
+  const totalNonCurrentLiabs = ledgerNonCurrentLiabs + nonCurrentLiabTotal;
+  const totalLiabilities = totalCurrentLiabs + totalNonCurrentLiabs;
+
+  // Equity (credit-normal)
+  const capitalBal  = -(balances['3010'] || 0); // credit-normal → positive = capital contributed
+  const drawingsBal =  (balances['3020'] || 0); // debit-normal (contra equity) → positive = drawings taken
+  const retainedBal = -(balances['3030'] || 0);
+
+  const netEquity = capitalBal - drawingsBal + retainedBal + netProfitLedger;
   const netAssets = totalAssets - totalLiabilities;
-  const netEquity = t.capital - t.drawings + t.netProfit;
 
   const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  const entity = document.getElementById('entity-name')?.value || 'Tayla';
   document.getElementById('bs-date-label').textContent = `As at ${today}`;
 
-  const entity = document.getElementById('entity-name')?.value || 'Tayla';
+  function bsRow(label, value, indent2) {
+    const cls = indent2 ? 'statement row indent2' : 'statement row';
+    return `<div class="${cls}"><span>${label}</span><span class="amount ${value < 0 ? 'negative' : ''}">${fmtAmt(value)}</span></div>`;
+  }
+  function bsTotal(label, value, grand) {
+    const cls = grand ? 'statement row grand-total' : 'statement row total';
+    return `<div class="${cls}"><span>${label}</span><span class="amount ${value < 0 ? 'negative' : value > 0 ? 'positive' : ''}">${fmtAmt(value)}</span></div>`;
+  }
 
   document.getElementById('balance-sheet-body').innerHTML = `
     <div style="margin-bottom:16px;">
       <div style="font-family:'DM Serif Display',serif;font-size:22px;">${entity}</div>
       <div style="font-size:13px;color:var(--text2);">Balance Sheet — As at ${today}</div>
-      <div style="font-size:12px;color:var(--text3);">All figures in AUD</div>
+      <div style="font-size:12px;color:var(--text3);">Derived from all journal entries and transactions · All figures in AUD</div>
     </div>
 
     <div class="section-title">Owner's Equity</div>
-    ${row('Capital', t.capital)}
-    ${row('Drawings', -t.drawings)}
-    ${row('Net Profit / (Loss)', t.netProfit)}
-    ${rowTotal('Net Equity', netEquity, true)}
+    ${bsRow('Capital', capitalBal)}
+    ${drawingsBal !== 0 ? bsRow('Less: Drawings', -drawingsBal) : ''}
+    ${retainedBal !== 0 ? bsRow('Retained Earnings', retainedBal) : ''}
+    ${bsRow('Current Year Net Profit / (Loss)', netProfitLedger)}
+    ${bsTotal('Net Equity', netEquity, false)}
 
-    <div style="margin-top:20px;"></div>
+    <div style="margin-top:24px;"></div>
     <div class="section-title">Assets</div>
+
     <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Current Assets</div>
-    ${row('Bank / Cash', bank)}
-    ${current.map(a => row(a.name, a.value)).join('')}
-    ${rowTotal('Total Current Assets', bank + currentTotal)}
+    ${cashBal !== 0 ? bsRow('1010 Cash at Bank', cashBal) : ''}
+    ${arBal !== 0 ? bsRow('1020 Accounts Receivable', arBal) : ''}
+    ${gstRecBal !== 0 ? bsRow('1030 GST Receivable', gstRecBal) : ''}
+    ${invBal !== 0 ? bsRow('1100 Inventory', invBal) : ''}
+    ${currentA.map(a => bsRow(a.name, a.value)).join('')}
+    ${bsTotal('Total Current Assets', totalCurrentAssets)}
 
-    ${ppe.length > 0 ? `
-    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Property, Plant & Equipment</div>
-    ${ppe.map(a => row(a.name, a.value)).join('')}
-    ${rowTotal('Total PPE', ppeTotal)}` : ''}
+    ${(ppeNetLedger !== 0 || ppe.length > 0) ? `
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Property, Plant &amp; Equipment</div>
+    ${ppeBal !== 0 ? bsRow('1500 Plant &amp; Equipment', ppeBal) : ''}
+    ${accDepBal !== 0 ? bsRow('1510 Accumulated Depreciation', accDepBal) : ''}
+    ${ppe.map(a => bsRow(a.name, a.value)).join('')}
+    ${bsTotal('Total PPE (Net)', totalPPE)}` : ''}
 
-    ${intangible.length > 0 ? `
+    ${(intanLedger !== 0 || intangible.length > 0) ? `
     <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Intangible Assets</div>
-    ${intangible.map(a => row(a.name, a.value)).join('')}
-    ${rowTotal('Total Intangibles', intangibleTotal)}` : ''}
+    ${intanBal !== 0 ? bsRow('1600 Intangible Assets', intanBal) : ''}
+    ${intangible.map(a => bsRow(a.name, a.value)).join('')}
+    ${bsTotal('Total Intangibles', totalIntangible)}` : ''}
 
-    ${rowTotal('Total Assets', totalAssets, true)}
+    ${bsTotal('Total Assets', totalAssets, false)}
 
-    <div style="margin-top:20px;"></div>
+    <div style="margin-top:24px;"></div>
     <div class="section-title">Liabilities</div>
 
-    ${currentLiabs.length > 0 ? `
     <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Current Liabilities</div>
-    ${currentLiabs.map(l => row(l.name, l.value)).join('')}
-    ${rowTotal('Total Current Liabilities', currentLiabTotal)}` : ''}
+    ${apBal !== 0 ? bsRow('2010 Accounts Payable', apBal) : ''}
+    ${gstPayBal !== 0 ? bsRow('2020 GST Payable', gstPayBal) : ''}
+    ${paygBal !== 0 ? bsRow('2030 PAYG Withholding Payable', paygBal) : ''}
+    ${superBal !== 0 ? bsRow('2040 Superannuation Payable', superBal) : ''}
+    ${annLeaveBal !== 0 ? bsRow('2200 Provision for Annual Leave', annLeaveBal) : ''}
+    ${currentLiabs.map(l => bsRow(l.name, l.value)).join('')}
+    ${totalCurrentLiabs > 0 ? bsTotal('Total Current Liabilities', totalCurrentLiabs) : '<div style="padding:6px 0;font-size:12px;color:var(--text3);">None</div>'}
 
-    ${nonCurrentLiabs.length > 0 ? `
+    ${(loanBal !== 0 || nonCurrentLiabs.length > 0) ? `
     <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Non-Current Liabilities</div>
-    ${nonCurrentLiabs.map(l => row(l.name, l.value)).join('')}
-    ${rowTotal('Total Non-Current Liabilities', nonCurrentLiabTotal)}` : ''}
+    ${loanBal !== 0 ? bsRow('2100 Loans Payable', loanBal) : ''}
+    ${nonCurrentLiabs.map(l => bsRow(l.name, l.value)).join('')}
+    ${bsTotal('Total Non-Current Liabilities', totalNonCurrentLiabs)}` : ''}
 
-    ${liabilities.length === 0 ? '<div style="padding:10px 0;font-size:13px;color:var(--text3);">No liabilities recorded.</div>' : ''}
-    ${rowTotal('Total Liabilities', totalLiabilities)}
+    ${bsTotal('Total Liabilities', totalLiabilities)}
 
     <div style="margin-top:16px;"></div>
-    <div class="statement row grand-total">
-      <span>Net Assets</span>
-      <span class="amount ${netAssets >= 0 ? 'positive' : 'negative'}">${fmtAmt(netAssets)}</span>
-    </div>
+    ${bsTotal('Net Assets', netAssets, true)}
 
     <div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3);">
-      ✓ Accounting equation check: Net Assets ${netAssets >= 0 ? '=' : '≠'} Net Equity — 
+      ✓ Accounting equation: Net Assets ${Math.abs(netAssets - netEquity) < 0.01 ? '=' : '≠'} Net Equity — 
       ${Math.abs(netAssets - netEquity) < 0.01 ? '<span style="color:var(--success);font-weight:600;">BALANCED</span>' : `<span style="color:var(--danger);">Difference: ${fmt(Math.abs(netAssets - netEquity))}</span>`}
     </div>
   `;
