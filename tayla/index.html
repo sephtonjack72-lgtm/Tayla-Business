@@ -1702,13 +1702,14 @@ function renderAll() {
   renderTransactions();
   renderJournals();
   renderLedger();
-  renderIncomeStatement();
-  renderBalanceSheet();
+  renderIncomeStatement();  // Now uses double-entry data
+  renderBalanceSheet();     // Now uses double-entry data
   renderGST();
   renderAssets();
   renderUsersTable();
   renderTax();
 }
+
 
 // ── KPIs ──
 function renderKPIs() {
