@@ -891,6 +891,44 @@
   </div>
 </div>
 
+<!-- EDIT JOURNAL MODAL -->
+<div class="modal-overlay" id="edit-journal-modal">
+  <div class="modal" style="width:600px;max-width:96vw;">
+    <h3>Edit Journal Entry</h3>
+    <div class="form-grid" style="margin-bottom:16px;">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="ej-date">
+      </div>
+      <div class="form-group">
+        <label>Reference #</label>
+        <input type="text" id="ej-ref">
+      </div>
+      <div class="form-group full">
+        <label>Narration</label>
+        <textarea id="ej-narration" style="min-height:50px;"></textarea>
+      </div>
+    </div>
+
+    <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;display:block;">Journal Lines</label>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 40px;gap:6px;margin-bottom:6px;">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Account</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Debit</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Credit</span>
+      <span></span>
+    </div>
+    <div id="ej-lines"></div>
+    <button class="btn btn-ghost btn-sm mt" onclick="addEditJournalLine()" style="width:100%;border:1.5px dashed var(--border);">+ Add Line</button>
+
+    <div id="ej-validation" style="margin-top:10px;padding:10px 14px;border-radius:8px;font-size:12px;display:none;"></div>
+
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('edit-journal-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveEditedJournal()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -1514,7 +1552,13 @@ function renderJournals() {
         <td><span class="mono" style="font-weight:600;">${j.ref}</span></td>
         <td style="font-style:italic;color:var(--text2);">${j.narration}</td>
         <td class="mono" colspan="2" style="font-weight:600;">${fmt(j.total)}</td>
-        <td>${j.source === 'journal' ? `<button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button>` : `<button class="btn btn-danger btn-sm" onclick="deleteTx('${j.id}')">✕</button>`}</td>
+        <td style="white-space:nowrap;">
+          ${j.source === 'journal'
+            ? `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}')" style="color:var(--text);">✎ Edit</button>
+               <button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}','tx')" style="color:var(--text);">✎ Edit</button>
+               <button class="btn btn-danger btn-sm" onclick="deleteTx('${j.id}')">✕</button>`}
+        </td>
       </tr>
       ${lineRows}
     `;
@@ -1528,6 +1572,157 @@ function deleteJournal(id) {
   renderJournals();
   renderLedger();
   toast('Journal deleted');
+}
+
+// ── EDIT JOURNAL ──
+let editJournalId = null;
+let editJournalSource = 'journal'; // 'journal' or 'tx'
+
+function buildAccountOptionsHtml(selectedId) {
+  let html = '<option value="">Select Account...</option>';
+  Object.entries(CHART_OF_ACCOUNTS).forEach(([group, data]) => {
+    html += `<optgroup label="${group.toUpperCase()}">`;
+    data.accounts.forEach(a => {
+      html += `<option value="${a.id}" ${a.id === selectedId ? 'selected' : ''}>${a.id} — ${a.name}</option>`;
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+
+function openEditJournal(id, source = 'journal') {
+  editJournalId = id;
+  editJournalSource = source;
+
+  let entry;
+  if (source === 'journal') {
+    entry = journals.find(j => j.id === id);
+    if (!entry) return;
+    document.getElementById('ej-date').value = entry.date;
+    document.getElementById('ej-ref').value = entry.ref;
+    document.getElementById('ej-narration').value = entry.narration;
+
+    const container = document.getElementById('ej-lines');
+    container.innerHTML = '';
+    entry.lines.forEach(l => addEditJournalLine(l.accountId, l.debit, l.credit));
+  } else {
+    // transaction type='journal'
+    entry = transactions.find(t => t.id === id);
+    if (!entry) return;
+    document.getElementById('ej-date').value = entry.date;
+    document.getElementById('ej-ref').value = entry.ref;
+    document.getElementById('ej-narration').value = entry.desc;
+
+    const container = document.getElementById('ej-lines');
+    container.innerHTML = '';
+    entry.debits.forEach(d => addEditJournalLine(d.account, d.amount, 0));
+    entry.credits.forEach(c => addEditJournalLine(c.account, 0, c.amount));
+  }
+
+  validateEditJournal();
+  document.getElementById('edit-journal-modal').classList.add('show');
+}
+
+function addEditJournalLine(accountId = '', debit = '', credit = '') {
+  const container = document.getElementById('ej-lines');
+  const lineId = 'ejl-' + uid();
+  const div = document.createElement('div');
+  div.className = 'ej-line';
+  div.dataset.lineId = lineId;
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 40px;gap:8px;margin-bottom:8px;align-items:center;';
+  div.innerHTML = `
+    <select class="ej-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+      ${buildAccountOptionsHtml(accountId)}
+    </select>
+    <input type="number" class="ej-debit" placeholder="Debit" step="0.01" min="0" value="${debit || ''}"
+      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateEditJournal()">
+    <input type="number" class="ej-credit" placeholder="Credit" step="0.01" min="0" value="${credit || ''}"
+      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateEditJournal()">
+    <button class="btn btn-danger btn-sm" onclick="removeEditJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
+  `;
+  container.appendChild(div);
+}
+
+function removeEditJournalLine(lineId) {
+  const lines = document.querySelectorAll('.ej-line');
+  if (lines.length <= 2) { toast('Minimum 2 lines required'); return; }
+  document.querySelector(`.ej-line[data-line-id="${lineId}"]`).remove();
+  validateEditJournal();
+}
+
+function validateEditJournal() {
+  let totalD = 0, totalC = 0, count = 0;
+  document.querySelectorAll('.ej-line').forEach(line => {
+    const acc = line.querySelector('.ej-account').value;
+    const d = parseFloat(line.querySelector('.ej-debit').value) || 0;
+    const c = parseFloat(line.querySelector('.ej-credit').value) || 0;
+    if (acc && (d > 0 || c > 0)) { totalD += d; totalC += c; count++; }
+  });
+  const el = document.getElementById('ej-validation');
+  const diff = Math.abs(totalD - totalC);
+  el.style.display = 'block';
+  if (count < 2) {
+    el.style.background = 'var(--surface2)'; el.style.color = 'var(--text2)';
+    el.innerHTML = '⚠ Minimum 2 accounts required';
+    return false;
+  } else if (diff > 0.01) {
+    el.style.background = '#fde2e2'; el.style.color = 'var(--danger)';
+    el.innerHTML = `❌ Out of balance by ${fmt(diff)}`;
+    return false;
+  } else {
+    el.style.background = '#d4edda'; el.style.color = 'var(--success)';
+    el.innerHTML = `✓ Balanced — ${fmt(totalD)} = ${fmt(totalC)}`;
+    return true;
+  }
+}
+
+function saveEditedJournal() {
+  if (!validateEditJournal()) { toast('Cannot save — entry is out of balance'); return; }
+
+  const date = document.getElementById('ej-date').value;
+  const ref  = document.getElementById('ej-ref').value.trim();
+  const narration = document.getElementById('ej-narration').value.trim();
+  if (!date || !ref || !narration) { toast('Please fill in date, reference and narration'); return; }
+
+  // Collect lines
+  const lines = [];
+  document.querySelectorAll('.ej-line').forEach(line => {
+    const accountId = line.querySelector('.ej-account').value;
+    const debit  = parseFloat(line.querySelector('.ej-debit').value)  || 0;
+    const credit = parseFloat(line.querySelector('.ej-credit').value) || 0;
+    if (accountId && (debit > 0 || credit > 0)) {
+      lines.push({ accountId, accountName: getAccount(accountId)?.name || accountId, debit, credit });
+    }
+  });
+
+  if (editJournalSource === 'journal') {
+    const j = journals.find(j => j.id === editJournalId);
+    if (!j) return;
+    // Check ref uniqueness (allow same ref if it's this entry)
+    if (journals.some(jj => jj.ref === ref && jj.id !== editJournalId)) {
+      toast('Reference number already used by another entry'); return;
+    }
+    j.date = date;
+    j.ref = ref;
+    j.narration = narration;
+    j.lines = lines;
+    j.total = lines.reduce((s, l) => s + l.debit, 0);
+  } else {
+    // transaction source
+    const t = transactions.find(t => t.id === editJournalId);
+    if (!t) return;
+    t.date = date;
+    t.ref = ref;
+    t.desc = narration;
+    t.debits = lines.filter(l => l.debit > 0).map(l => ({ account: l.accountId, amount: l.debit }));
+    t.credits = lines.filter(l => l.credit > 0).map(l => ({ account: l.accountId, amount: l.credit }));
+    t.amount = t.debits.reduce((s, d) => s + d.amount, 0);
+  }
+
+  save();
+  closeModal('edit-journal-modal');
+  renderAll();
+  toast('Journal entry updated ✓');
 }
 
 // ══════════════════════════════════════════════════════
