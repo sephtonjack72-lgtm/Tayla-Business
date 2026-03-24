@@ -1888,7 +1888,6 @@ function row(label, value, positive = false) {
 function rowTotal(label, value, positive = false) {
   return `<div class="statement row total"><span>${label}</span><span class="amount ${positive && value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${fmtAmt(value)}</span></div>`;
 }
-
 // ── BALANCE SHEET ──
 function renderBalanceSheet() {
   const t = totals();
