@@ -1411,8 +1411,8 @@ function addJournalLine() {
         </optgroup>
       `).join('')}
     </select>
-    <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateJournal()">
-    <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateJournal()">
+    <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#4f8ef7':'var(--border)';validateJournal()">
+    <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#e8c547':'var(--border)';validateJournal()">
     <button class="btn btn-danger btn-sm" onclick="removeJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
   `;
   container.appendChild(div);
@@ -1671,10 +1671,10 @@ function addEditJournalLine(accountId = '', debit = '', credit = '') {
     <select class="ej-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
       ${buildAccountOptionsHtml(accountId)}
     </select>
-    <input type="number" class="ej-debit" placeholder="Debit" step="0.01" min="0" value="${debit || ''}"
-      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateEditJournal()">
-    <input type="number" class="ej-credit" placeholder="Credit" step="0.01" min="0" value="${credit || ''}"
-      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateEditJournal()">
+    <input type="number" class="ej-debit" placeholder="Debit" step="0.01" min="0" value="${debit > 0 ? debit : ''}"
+      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);${debit > 0 ? 'border-color:#4f8ef7;' : ''}" oninput="validateEditJournal()">
+    <input type="number" class="ej-credit" placeholder="Credit" step="0.01" min="0" value="${credit > 0 ? credit : ''}"
+      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);${credit > 0 ? 'border-color:#e8c547;' : ''}" oninput="validateEditJournal()">
     <button class="btn btn-danger btn-sm" onclick="removeEditJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
   `;
   container.appendChild(div);
