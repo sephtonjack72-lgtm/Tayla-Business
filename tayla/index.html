@@ -53,7 +53,7 @@
   .btn-sm { padding: 5px 12px; font-size: 12px; }
 
   /* ── NAV TABS ── */
-  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; gap: 0; overflow-x: auto; overflow-y: visible; }
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 32px; display: flex; gap: 0; overflow: visible; position: sticky; top: 64px; z-index: 99; }
   .tab { padding: 14px 20px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all .15s; }
   .tab:hover { color: var(--accent); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent2); border-bottom-width: 3px; }
@@ -291,7 +291,7 @@
     border-radius: 0 0 10px 10px;
     box-shadow: 0 8px 24px rgba(26,26,46,0.12);
     min-width: 180px;
-    z-index: 200;
+    z-index: 9999;
     overflow: hidden;
   }
   .dropdown-menu.open { display: block; }
