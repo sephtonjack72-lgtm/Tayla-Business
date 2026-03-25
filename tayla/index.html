@@ -362,7 +362,7 @@
               <select id="tx-debit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
                 <option value="">Select Account...</option>
               </select>
-              <input type="number" id="tx-debit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+              <input type="number" id="tx-debit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
               <button class="btn btn-ghost btn-sm" onclick="addTxLine('debit')" title="Add another debit line" style="padding:4px 8px;">+</button>
             </div>
           </div>
@@ -381,12 +381,26 @@
               <select id="tx-credit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
                 <option value="">Select Account...</option>
               </select>
-              <input type="number" id="tx-credit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+              <input type="number" id="tx-credit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
               <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" title="Add another credit line" style="padding:4px 8px;">+</button>
             </div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" style="width:100%;border:1.5px dashed var(--border);font-size:12px;margin-top:2px;">+ Add Credit Line</button>
         </div>
+
+        <!-- GST Toggle -->
+        <div style="margin-top:14px;padding:12px 16px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">GST Applicable (10%)</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px;">Auto-splits GST from your amounts into the GST account</div>
+          </div>
+          <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;cursor:pointer;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="tx-gst-toggle" onchange="onGstToggle()" style="opacity:0;width:0;height:0;position:absolute;">
+            <span id="tx-gst-slider" style="position:absolute;inset:0;border-radius:24px;background:var(--border);transition:.2s;pointer-events:none;"></span>
+            <span id="tx-gst-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+          </label>
+        </div>
+        <div id="tx-gst-preview" style="display:none;margin-top:8px;padding:10px 14px;background:#eaf7ee;border:1px solid #b7dfc4;border-radius:8px;font-size:12px;color:#155724;font-family:'DM Mono',monospace;line-height:2;"></div>
 
         <div style="margin-top:12px;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);line-height:1.6;">
           <strong>Tip — multiple lines:</strong> Click <em>+ Add Debit/Credit Line</em> for split entries. e.g. buying a vehicle on finance:
@@ -1410,43 +1424,126 @@ function validateTx() {
   }
 }
 
+function onGstToggle() {
+  const on = document.getElementById('tx-gst-toggle').checked;
+  const slider = document.getElementById('tx-gst-slider');
+  const knob = document.getElementById('tx-gst-knob');
+  slider.style.background = on ? 'var(--success)' : 'var(--border)';
+  knob.style.left = on ? '23px' : '3px';
+  updateGstPreview();
+}
+
+function updateGstPreview() {
+  const on = document.getElementById('tx-gst-toggle').checked;
+  const preview = document.getElementById('tx-gst-preview');
+  if (!on) { preview.style.display = 'none'; return; }
+
+  // Collect debit totals
+  let totalDebits = 0;
+  document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    totalDebits += amt;
+  });
+
+  if (totalDebits === 0) { preview.style.display = 'none'; return; }
+
+  const gst = +(totalDebits / 11).toFixed(2);
+  const net = +(totalDebits - gst).toFixed(2);
+
+  preview.style.display = 'block';
+  preview.innerHTML =
+    `✓ GST will be auto-split on save:<br>` +
+    `&nbsp;&nbsp;Gross amount: ${fmt(totalDebits)}<br>` +
+    `&nbsp;&nbsp;GST (1/11th) → 1030 GST Receivable / 2020 GST Payable: ${fmt(gst)}<br>` +
+    `&nbsp;&nbsp;Net amount posted to account: ${fmt(net)}`;
+}
+
 function addTransactionDoubleEntry() {
-  if (!validateTx()) {
-    toast('Transaction must balance — debits equal credits');
-    return;
-  }
-  
+  const gstOn = document.getElementById('tx-gst-toggle').checked;
+
   const date = document.getElementById('tx-date').value;
-  const ref = document.getElementById('tx-ref').value.trim();
+  const ref  = document.getElementById('tx-ref').value.trim();
   const desc = document.getElementById('tx-desc').value.trim();
-  
-  if (!date || !desc) {
-    toast('Please fill in date and description');
-    return;
-  }
-  
-  // Collect lines
-  const debits = [], credits = [];
+
+  if (!date || !desc) { toast('Please fill in date and description'); return; }
+
+  // Collect raw lines
+  const rawDebits = [], rawCredits = [];
   document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
     const acc = line.querySelector('select').value;
-    const amt = parseFloat(line.querySelector('input').value) || 0;
-    if (acc && amt > 0) debits.push({ account: acc, amount: amt });
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    if (acc && amt > 0) rawDebits.push({ account: acc, amount: amt });
   });
-  
   document.querySelectorAll('#tx-credit-lines .tx-line').forEach(line => {
     const acc = line.querySelector('select').value;
-    const amt = parseFloat(line.querySelector('input').value) || 0;
-    if (acc && amt > 0) credits.push({ account: acc, amount: amt });
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    if (acc && amt > 0) rawCredits.push({ account: acc, amount: amt });
   });
-  
+
+  if (rawDebits.length === 0 || rawCredits.length === 0) {
+    toast('Need at least 1 debit and 1 credit line'); return;
+  }
+
+  let debits = [...rawDebits];
+  let credits = [...rawCredits];
+
+  // ── GST AUTO-SPLIT ──
+  // When GST is on, we determine if this looks like an expense or revenue
+  // by checking whether the debit or credit side has a revenue/expense account.
+  // We split the 1/11th GST out of the expense/revenue lines and add the
+  // appropriate GST account (1030 GST Receivable for purchases, 2020 GST Payable for sales).
+  if (gstOn) {
+    const expenseTypes = ['expense'];
+    const revenueTypes = ['revenue'];
+
+    // Check if debits contain expense accounts (purchase) or credits contain revenue (sale)
+    const isExpense = rawDebits.some(d => expenseTypes.includes(getAccount(d.account)?.type));
+    const isRevenue = rawCredits.some(c => revenueTypes.includes(getAccount(c.account)?.type));
+
+    if (isExpense) {
+      // Purchase: DR Expense (net) + DR 1030 GST Receivable (gst) | CR as-is
+      debits = [];
+      let totalGst = 0;
+      rawDebits.forEach(d => {
+        const acc = getAccount(d.account);
+        if (expenseTypes.includes(acc?.type)) {
+          const gst = +(d.amount / 11).toFixed(2);
+          const net = +(d.amount - gst).toFixed(2);
+          totalGst += gst;
+          debits.push({ account: d.account, amount: net });
+        } else {
+          debits.push(d);
+        }
+      });
+      if (totalGst > 0) debits.push({ account: '1030', amount: totalGst });
+    } else if (isRevenue) {
+      // Sale: DR as-is | CR Revenue (net) + CR 2020 GST Payable (gst)
+      credits = [];
+      let totalGst = 0;
+      rawCredits.forEach(c => {
+        const acc = getAccount(c.account);
+        if (revenueTypes.includes(acc?.type)) {
+          const gst = +(c.amount / 11).toFixed(2);
+          const net = +(c.amount - gst).toFixed(2);
+          totalGst += gst;
+          credits.push({ account: c.account, amount: net });
+        } else {
+          credits.push(c);
+        }
+      });
+      if (totalGst > 0) credits.push({ account: '2020', amount: totalGst });
+    }
+  }
+
+  // Validate balance after GST split
+  const totalD = debits.reduce((s, d) => s + d.amount, 0);
+  const totalC = credits.reduce((s, c) => s + c.amount, 0);
+  if (Math.abs(totalD - totalC) > 0.02) {
+    toast('Transaction must balance — debits equal credits'); return;
+  }
+
   const totalAmount = debits.reduce((s, d) => s + d.amount, 0);
-  
-  // Determine GST eligibility
-  const hasGstAccount = [...debits, ...credits].some(l => {
-    const acc = getAccount(l.account);
-    return acc && acc.gst;
-  });
-  
+
   transactions.unshift({
     id: uid(),
     date,
@@ -1456,22 +1553,24 @@ function addTransactionDoubleEntry() {
     debits,
     credits,
     amount: totalAmount,
-    gst: hasGstAccount ? 'yes' : 'no',
+    gst: gstOn ? 'yes' : 'no',
     method: 'Journal'
   });
-  
+
   save();
   renderAll();
-  
+
   // Reset form
   document.getElementById('tx-desc').value = '';
   document.getElementById('tx-ref').value = '';
+  document.getElementById('tx-gst-toggle').checked = false;
+  onGstToggle();
   document.getElementById('tx-debit-lines').innerHTML = `
     <div class="tx-line" style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;">
       <select id="tx-debit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
         <option value="">Select Account...</option>
       </select>
-      <input type="number" id="tx-debit-amount-0" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+      <input type="number" id="tx-debit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
       <button class="btn btn-ghost btn-sm" onclick="addTxLine('debit')" style="padding:4px 8px;">+</button>
     </div>
   `;
@@ -1480,15 +1579,14 @@ function addTransactionDoubleEntry() {
       <select id="tx-credit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
         <option value="">Select Account...</option>
       </select>
-      <input type="number" id="tx-credit-amount-0" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+      <input type="number" id="tx-credit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
       <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" style="padding:4px 8px;">+</button>
     </div>
   `;
   txDebitLines = 1; txCreditLines = 1;
   initTxLines();
   validateTx();
-  
-  toast('Double-entry transaction saved ✓');
+  toast('Transaction saved ✓' + (gstOn ? ' (GST split applied)' : ''));
 }
 
 // ══════════════════════════════════════════════════════
