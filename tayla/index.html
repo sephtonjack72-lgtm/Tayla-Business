@@ -186,6 +186,78 @@
 </head>
 <body>
 
+<!-- ── LOGIN OVERLAY ── -->
+<div id="login-overlay" style="
+  position:fixed;inset:0;z-index:9999;
+  background:var(--accent);
+  display:flex;align-items:center;justify-content:center;
+">
+  <div style="
+    background:var(--surface);border-radius:16px;
+    padding:48px 40px;width:380px;max-width:90vw;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+    text-align:center;
+  ">
+    <div style="font-family:'DM Serif Display',serif;font-size:28px;color:var(--accent);margin-bottom:4px;">
+      Tayla <span style="color:var(--accent2);">Business</span>
+    </div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:32px;">Sign in to continue</div>
+
+    <div style="text-align:left;margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Password</label>
+      <input
+        type="password"
+        id="login-password"
+        placeholder="Enter password"
+        style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
+        onkeydown="if(event.key==='Enter')attemptLogin()"
+      >
+    </div>
+
+    <div id="login-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;">
+      Incorrect password. Please try again.
+    </div>
+
+    <button onclick="attemptLogin()" style="
+      width:100%;padding:13px;background:var(--accent);color:#fff;
+      border:none;border-radius:8px;font-size:14px;font-weight:600;
+      font-family:'DM Sans',sans-serif;cursor:pointer;
+      transition:background .15s;
+    " onmouseover="this.style.background='#2d2d4e'" onmouseout="this.style.background='var(--accent)'">
+      Sign In
+    </button>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const HASH = '9e2cb760e523b4b59bae50f0dddd9d8bc888c25f4c8f7b3a3e6cbdf1beb61d99';
+    async function sha256(msg) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+    // Check session
+    if (sessionStorage.getItem('tb_auth') === '1') {
+      document.getElementById('login-overlay').style.display = 'none';
+    }
+    window.attemptLogin = async function() {
+      const pw = document.getElementById('login-password').value;
+      const h = await sha256(pw);
+      if (h === HASH) {
+        sessionStorage.setItem('tb_auth', '1');
+        const overlay = document.getElementById('login-overlay');
+        overlay.style.transition = 'opacity .3s';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.style.display = 'none', 300);
+      } else {
+        document.getElementById('login-error').style.display = 'block';
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
+      }
+    };
+  })();
+</script>
+
 <header>
   <div class="logo">Tayla <span>Business</span></div>
   <div class="header-actions">
