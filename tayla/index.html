@@ -265,13 +265,63 @@
   <div class="tab" onclick="showPage('transactions')">Transactions</div>
   <div class="tab" onclick="showPage('journals')">Journals</div>
   <div class="tab" onclick="showPage('ledger')">Ledger</div>
-  <div class="tab" onclick="showPage('income-stmt')">Income Statement</div>
-  <div class="tab" onclick="showPage('balance-sheet')">Balance Sheet</div>
-  <div class="tab" onclick="showPage('gst')">GST</div>
-  <div class="tab" onclick="showPage('users-page')">Users</div>
-  <div class="tab" onclick="showPage('tax-page')">Tax</div>
+  <div class="tab tab-dropdown" id="reports-tab">
+    <span onclick="toggleReportsMenu(event)">Reports ▾</span>
+    <div class="dropdown-menu" id="reports-menu">
+      <div class="dropdown-item" onclick="showPage('income-stmt');closeReportsMenu()">Income Statement</div>
+      <div class="dropdown-item" onclick="showPage('balance-sheet');closeReportsMenu()">Balance Sheet</div>
+      <div class="dropdown-item" onclick="showPage('gst');closeReportsMenu()">GST</div>
+      <div class="dropdown-item" onclick="showPage('users-page');closeReportsMenu()">Users</div>
+      <div class="dropdown-item" onclick="showPage('tax-page');closeReportsMenu()">Tax</div>
+    </div>
+  </div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
+
+<style>
+  .tab-dropdown { position: relative; }
+  .tab-dropdown > span { cursor: pointer; }
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0 0 10px 10px;
+    box-shadow: 0 8px 24px rgba(26,26,46,0.12);
+    min-width: 180px;
+    z-index: 200;
+    overflow: hidden;
+  }
+  .dropdown-menu.open { display: block; }
+  .dropdown-item {
+    padding: 11px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    transition: background .12s, color .12s;
+  }
+  .dropdown-item:last-child { border-bottom: none; }
+  .dropdown-item:hover { background: var(--surface2); color: var(--accent); }
+</style>
+
+<script>
+  function toggleReportsMenu(e) {
+    e.stopPropagation();
+    document.getElementById('reports-menu').classList.toggle('open');
+  }
+  function closeReportsMenu() {
+    document.getElementById('reports-menu').classList.remove('open');
+  }
+  document.addEventListener('click', function(e) {
+    if (!document.getElementById('reports-tab').contains(e.target)) {
+      closeReportsMenu();
+    }
+  });
+</script>
 
 <main>
 
@@ -1219,7 +1269,12 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  event.currentTarget.classList.add('active');
+  const reportPages = ['income-stmt','balance-sheet','gst','users-page','tax-page'];
+  if (reportPages.includes(id)) {
+    document.getElementById('reports-tab').classList.add('active');
+  } else {
+    event.currentTarget.classList.add('active');
+  }
   renderAll();
 }
 
