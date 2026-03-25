@@ -531,6 +531,20 @@
         </div>
         
         <div id="journal-validation" style="margin-top:12px;padding:10px 14px;border-radius:8px;font-size:12px;display:none;"></div>
+
+        <!-- GST Toggle -->
+        <div style="margin-top:14px;padding:12px 16px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">GST Applicable (10%)</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:2px;">Auto-splits 1/11th GST from expense/revenue lines into the GST account on save</div>
+          </div>
+          <label style="position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0;cursor:pointer;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" id="journal-gst-toggle" onchange="onJournalGstToggle()" style="opacity:0;width:0;height:0;position:absolute;">
+            <span id="journal-gst-slider" style="position:absolute;inset:0;border-radius:24px;background:var(--border);transition:.2s;pointer-events:none;"></span>
+            <span id="journal-gst-knob" style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.2);"></span>
+          </label>
+        </div>
+        <div id="journal-gst-preview" style="display:none;margin-top:8px;padding:10px 14px;background:#eaf7ee;border:1px solid #b7dfc4;border-radius:8px;font-size:12px;color:#155724;font-family:'DM Mono',monospace;line-height:2;"></div>
         
         <button class="btn btn-primary mt" onclick="saveJournal()" style="width:100%;">Save Journal Entry</button>
       </div>
@@ -1615,7 +1629,7 @@ function addJournalLine() {
         </optgroup>
       `).join('')}
     </select>
-    <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#4f8ef7':'var(--border)';validateJournal()">
+    <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#4f8ef7':'var(--border)';validateJournal();updateJournalGstPreview()">
     <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#e8c547':'var(--border)';validateJournal()">
     <button class="btn btn-danger btn-sm" onclick="removeJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
   `;
@@ -1672,6 +1686,32 @@ function validateJournal() {
   }
 }
 
+function onJournalGstToggle() {
+  const on = document.getElementById('journal-gst-toggle').checked;
+  document.getElementById('journal-gst-slider').style.background = on ? 'var(--success)' : 'var(--border)';
+  document.getElementById('journal-gst-knob').style.left = on ? '23px' : '3px';
+  updateJournalGstPreview();
+}
+
+function updateJournalGstPreview() {
+  const on = document.getElementById('journal-gst-toggle').checked;
+  const preview = document.getElementById('journal-gst-preview');
+  if (!on) { preview.style.display = 'none'; return; }
+
+  let totalDebits = 0;
+  document.querySelectorAll('.journal-line').forEach(line => {
+    totalDebits += parseFloat(line.querySelector('.journal-debit').value) || 0;
+  });
+
+  if (totalDebits === 0) { preview.style.display = 'none'; return; }
+  const gst = +(totalDebits / 11).toFixed(2);
+  const net = +(totalDebits - gst).toFixed(2);
+  preview.style.display = 'block';
+  preview.innerHTML =
+    `✓ GST will be auto-split on save:<br>` +
+    `&nbsp;&nbsp;Gross: ${fmt(totalDebits)} → Net: ${fmt(net)} + GST: ${fmt(gst)}`;
+}
+
 function saveJournal() {
   if (!validateJournal()) {
     toast('Cannot save — journal is out of balance');
@@ -1681,6 +1721,7 @@ function saveJournal() {
   const date = document.getElementById('journal-date').value;
   const ref = document.getElementById('journal-ref').value.trim();
   const narration = document.getElementById('journal-narration').value.trim();
+  const gstOn = document.getElementById('journal-gst-toggle').checked;
   
   if (!date || !ref || !narration) {
     toast('Please fill in date, reference and narration');
@@ -1692,16 +1733,40 @@ function saveJournal() {
     return;
   }
   
-  const lines = [];
+  let lines = [];
   document.querySelectorAll('.journal-line').forEach(line => {
     const accountId = line.querySelector('.journal-account').value;
     const debit = parseFloat(line.querySelector('.journal-debit').value) || 0;
     const credit = parseFloat(line.querySelector('.journal-credit').value) || 0;
-    
     if (accountId && (debit > 0 || credit > 0)) {
-      lines.push({ accountId, accountName: getAccount(accountId).name, debit, credit });
+      lines.push({ accountId, accountName: getAccount(accountId)?.name || accountId, debit, credit });
     }
   });
+
+  // ── GST AUTO-SPLIT ──
+  if (gstOn) {
+    const finalLines = [];
+    let gstDebit = 0, gstCredit = 0;
+    lines.forEach(l => {
+      const acc = getAccount(l.accountId);
+      if (acc?.type === 'expense' && l.debit > 0) {
+        const gst = +(l.debit / 11).toFixed(2);
+        const net = +(l.debit - gst).toFixed(2);
+        gstDebit += gst;
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: net, credit: 0 });
+      } else if (acc?.type === 'revenue' && l.credit > 0) {
+        const gst = +(l.credit / 11).toFixed(2);
+        const net = +(l.credit - gst).toFixed(2);
+        gstCredit += gst;
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: net });
+      } else {
+        finalLines.push(l);
+      }
+    });
+    if (gstDebit > 0) finalLines.push({ accountId: '1030', accountName: 'GST Receivable', debit: gstDebit, credit: 0 });
+    if (gstCredit > 0) finalLines.push({ accountId: '2020', accountName: 'GST Payable', debit: 0, credit: gstCredit });
+    lines = finalLines;
+  }
   
   const total = lines.reduce((sum, l) => sum + l.debit, 0);
   
@@ -1712,6 +1777,7 @@ function saveJournal() {
     narration,
     lines,
     total,
+    gst: gstOn ? 'yes' : 'no',
     createdAt: new Date().toISOString()
   });
   
@@ -1720,8 +1786,10 @@ function saveJournal() {
   document.getElementById('journal-ref').value = '';
   document.getElementById('journal-narration').value = '';
   document.getElementById('journal-date').valueAsDate = new Date();
+  document.getElementById('journal-gst-toggle').checked = false;
+  onJournalGstToggle();
   renderAll();
-  toast('Journal entry saved ✓');
+  toast('Journal entry saved ✓' + (gstOn ? ' (GST split applied)' : ''));
 }
 
 function renderJournals() {
@@ -1776,24 +1844,26 @@ function renderJournals() {
   }
 
   tbody.innerHTML = allEntries.map(j => {
-    const lineRows = j.lines.map((l, i) => `
+    const lineRows = j.lines.map(l => `
       <tr style="background:var(--surface2);">
-        <td colspan="2" style="padding:4px 14px 4px ${i === 0 ? '32px' : '48px'};font-size:12px;color:var(--text2);">
-          ${l.account} — ${l.accountName}
-        </td>
-        <td style="padding:4px 14px;font-size:12px;" colspan="1"></td>
-        <td class="mono" style="padding:4px 14px;font-size:12px;color:${l.debit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.debit > 0 ? fmt(l.debit) : '—'}</td>
-        <td class="mono" style="padding:4px 14px;font-size:12px;color:${l.credit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.credit > 0 ? fmt(l.credit) : '—'}</td>
-        <td></td>
+        <td style="padding:4px 12px;font-size:12px;color:var(--text3);"></td>
+        <td style="padding:4px 12px;font-size:12px;color:var(--text3);"></td>
+        <td style="padding:4px 12px 4px 28px;font-size:12px;color:var(--text2);">${l.account} — ${l.accountName}</td>
+        <td style="padding:4px 12px;font-size:12px;"></td>
+        <td class="mono" style="padding:4px 12px;font-size:12px;color:${l.debit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.debit > 0 ? fmt(l.debit) : '—'}</td>
+        <td class="mono" style="padding:4px 12px;font-size:12px;color:${l.credit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.credit > 0 ? fmt(l.credit) : '—'}</td>
+        <td style="padding:4px 12px;"></td>
       </tr>`).join('');
 
     return `
       <tr style="border-top:2px solid var(--border);">
-        <td><strong>${fmtDate(j.date)}</strong></td>
-        <td><span class="mono" style="font-weight:600;">${j.ref}</span></td>
-        <td style="font-style:italic;color:var(--text2);">${j.narration}</td>
-        <td class="mono" colspan="2" style="font-weight:600;">${fmt(j.total)}</td>
-        <td style="white-space:nowrap;">
+        <td style="padding:10px 12px;white-space:nowrap;"><strong>${fmtDate(j.date)}</strong></td>
+        <td style="padding:10px 12px;"><span class="mono" style="font-weight:600;font-size:12px;">${j.ref}</span></td>
+        <td style="padding:10px 12px;font-style:italic;color:var(--text2);">${j.narration}</td>
+        <td class="mono" style="padding:10px 12px;font-weight:600;">${fmt(j.total)}</td>
+        <td style="padding:10px 12px;"></td>
+        <td style="padding:10px 12px;"></td>
+        <td style="padding:10px 12px;white-space:nowrap;">
           ${j.source === 'journal'
             ? `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}')" style="color:var(--text);">✎ Edit</button>
                <button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button>`
