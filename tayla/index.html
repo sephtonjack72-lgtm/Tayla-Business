@@ -231,19 +231,13 @@
 
 <script>
   (function() {
-    const HASH = '9e2cb760e523b4b59bae50f0dddd9d8bc888c25f4c8f7b3a3e6cbdf1beb61d99';
-    async function sha256(msg) {
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-    }
-    // Check session
+    const PW = 'FordFalcon1*';
     if (sessionStorage.getItem('tb_auth') === '1') {
       document.getElementById('login-overlay').style.display = 'none';
     }
-    window.attemptLogin = async function() {
+    window.attemptLogin = function() {
       const pw = document.getElementById('login-password').value;
-      const h = await sha256(pw);
-      if (h === HASH) {
+      if (pw === PW) {
         sessionStorage.setItem('tb_auth', '1');
         const overlay = document.getElementById('login-overlay');
         overlay.style.transition = 'opacity .3s';
