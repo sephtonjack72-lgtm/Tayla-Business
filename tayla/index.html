@@ -423,7 +423,7 @@
     <div class="kpi"><div class="kpi-label">Balance</div><div class="kpi-value" id="journal-balance">$0.00</div></div>
   </div>
   
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="responsive-2col">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:stretch;" class="responsive-2col">
     <!-- Add Journal Entry -->
     <div class="card">
       <div class="card-header"><span class="card-title">General Journal Entry</span></div>
@@ -473,11 +473,11 @@
     </div>
     
     <!-- Recent Journals -->
-    <div class="card">
+    <div class="card" style="display:flex;flex-direction:column;">
       <div class="card-header"><span class="card-title">Recent Journal Entries</span></div>
-      <div class="card-body" style="padding:0;">
-        <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
-          <table id="journals-table">
+      <div class="card-body" style="padding:0;flex:1;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="flex:1;overflow-y:auto;">
+          <table id="journals-table" style="width:100%;border-collapse:collapse;font-size:13px;">
             <thead><tr><th>Date</th><th>Ref</th><th>Narration / Account</th><th>Total</th><th>Debit</th><th>Credit</th><th>Actions</th></tr></thead>
             <tbody id="journals-tbody"></tbody>
           </table>
