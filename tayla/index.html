@@ -1292,7 +1292,6 @@ function validateTx() {
     validationDiv.style.display = 'block';
     validationDiv.style.background = '#fde2e2';
     validationDiv.style.color = 'var(--danger)';
-    validationDiv.inner
     validationDiv.innerHTML = `❌ Out of balance by ${fmt(diff)}`;
     return false;
   } else {
@@ -1515,8 +1514,8 @@ function saveJournal() {
   initJournalLines();
   document.getElementById('journal-ref').value = '';
   document.getElementById('journal-narration').value = '';
-  renderJournals();
-  renderLedger();
+  document.getElementById('journal-date').valueAsDate = new Date();
+  renderAll();
   toast('Journal entry saved ✓');
 }
 
@@ -1606,8 +1605,7 @@ function deleteJournal(id) {
   if (!confirm('Delete this journal entry?')) return;
   journals = journals.filter(j => j.id !== id);
   save();
-  renderJournals();
-  renderLedger();
+  renderAll();
   toast('Journal deleted');
 }
 
@@ -2291,14 +2289,11 @@ function renderIncomeStatement() {
 }
 
 function row(label, value, positive = false) {
-  return `<div class="statement row"><span>${label}</span><span class="amount ${positive && value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${fmtAmt(value)}</span></div>`;
+  const numValue = typeof value === 'number' ? value : 0;
+  return `<div class="statement row"><span>${label}</span><span class="amount ${positive && numValue > 0 ? 'positive' : numValue < 0 ? 'negative' : ''}">${fmtAmt(numValue)}</span></div>`;
 }
 function rowTotal(label, value, positive = false) {
   return `<div class="statement row total"><span>${label}</span><span class="amount ${positive && value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${fmtAmt(value)}</span></div>`;
-}
-function row(label, value, positive = false) {
-  const numValue = typeof value === 'number' ? value : 0;
-  return `<div class="statement row"><span>${label}</span><span class="amount ${positive && numValue > 0 ? 'positive' : numValue < 0 ? 'negative' : ''}">${fmtAmt(numValue)}</span></div>`;
 }
 
 // ── BALANCE SHEET ──
