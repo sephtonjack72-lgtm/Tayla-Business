@@ -323,6 +323,7 @@
     </div>
   </div>
   <div class="tab" onclick="showPage('reconcile-page')">⇄ Reconcile</div>
+  <div class="tab" onclick="showPage('invoices-page')">🧾 Invoices</div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
@@ -1150,6 +1151,267 @@
 
 </div><!-- /reconcile-page -->
 
+<!-- ══════════════════ INVOICES ══════════════════ -->
+<div id="invoices-page" class="page">
+
+  <!-- Sub-nav -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
+    <button class="inv-tab active" onclick="showInvTab('list')"     id="itab-list"     style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🧾 Invoices</button>
+    <button class="inv-tab"        onclick="showInvTab('contacts')" id="itab-contacts"  style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">👤 Contacts</button>
+    <button class="inv-tab"        onclick="showInvTab('editor')"   id="itab-editor"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">✏ New Invoice</button>
+  </div>
+
+  <!-- ── INVOICE LIST ── -->
+  <div id="inv-list">
+    <!-- KPIs -->
+    <div class="kpi-grid" id="inv-kpis" style="margin-bottom:24px;"></div>
+
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Invoices</span>
+        <div class="flex-gap">
+          <input type="text" id="inv-search" placeholder="Search…" style="width:180px;" oninput="renderInvoiceList()">
+          <select id="inv-filter-status" onchange="renderInvoiceList()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
+            <option value="">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="newInvoice()">+ New Invoice</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Invoice #</th><th>Client</th><th>Issue Date</th><th>Due Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="inv-tbody"></tbody>
+          </table>
+        </div>
+        <div id="inv-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:12px;">🧾</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text2);">No invoices yet</div>
+          <div style="font-size:13px;margin-top:6px;">Create your first invoice to get started.</div>
+          <button class="btn btn-primary mt" onclick="newInvoice()">+ Create Invoice</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONTACTS ── -->
+  <div id="inv-contacts" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;" class="responsive-2col">
+
+      <div class="card">
+        <div class="card-header"><span class="card-title" id="contact-form-title">Add Contact</span></div>
+        <div class="card-body">
+          <input type="hidden" id="contact-edit-id">
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="form-group">
+              <label>Name / Business Name <span style="color:var(--danger);">*</span></label>
+              <input type="text" id="contact-name" placeholder="e.g. Acme Pty Ltd">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Type</label>
+                <select id="contact-type">
+                  <option value="customer">Customer</option>
+                  <option value="supplier">Supplier</option>
+                  <option value="both">Both</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>ABN</label>
+                <input type="text" id="contact-abn" placeholder="12 345 678 901" maxlength="14">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="contact-email" placeholder="accounts@acme.com.au">
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="tel" id="contact-phone" placeholder="03 9000 0000">
+            </div>
+            <div class="form-group">
+              <label>Address</label>
+              <input type="text" id="contact-address" placeholder="123 Collins St, Melbourne VIC 3000">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button class="btn btn-primary" style="flex:1;" onclick="saveContact()">Save Contact</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--text);display:none;" id="contact-cancel-btn" onclick="cancelContactEdit()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header flex-between">
+          <span class="card-title">Contacts</span>
+          <input type="text" id="contact-search" placeholder="Search…" style="width:160px;" oninput="renderContactsList()">
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div id="contacts-list">
+            <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No contacts yet.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── INVOICE EDITOR ── -->
+  <div id="inv-editor" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start;" class="responsive-2col">
+
+      <!-- Editor form -->
+      <div>
+        <div class="card section-gap">
+          <div class="card-header flex-between">
+            <span class="card-title" id="editor-title">New Invoice</span>
+            <div class="flex-gap">
+              <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="saveInvoiceDraft()">Save Draft</button>
+              <button class="btn btn-primary btn-sm" onclick="saveInvoiceSend()">Save & Mark Sent</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <input type="hidden" id="inv-edit-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+              <div class="form-group">
+                <label>Invoice Number</label>
+                <input type="text" id="inv-number" placeholder="INV-001">
+              </div>
+              <div class="form-group">
+                <label>Status</label>
+                <select id="inv-status">
+                  <option value="draft">Draft</option>
+                  <option value="sent">Sent</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Issue Date</label>
+                <input type="date" id="inv-issue-date">
+              </div>
+              <div class="form-group">
+                <label>Due Date</label>
+                <input type="date" id="inv-due-date">
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px;">
+              <label>Client</label>
+              <div style="display:flex;gap:8px;">
+                <select id="inv-contact" style="flex:1;" onchange="onInvContactChange()">
+                  <option value="">Select client…</option>
+                </select>
+                <button class="btn btn-ghost btn-sm" style="color:var(--text);white-space:nowrap;" onclick="showInvTab('contacts')">+ Add Client</button>
+              </div>
+            </div>
+
+            <!-- Line items -->
+            <div style="margin-bottom:16px;">
+              <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:10px;">Line Items</label>
+              <div style="display:grid;grid-template-columns:2fr 80px 110px 80px 110px 36px;gap:8px;margin-bottom:6px;padding:0 2px;">
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Description</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Qty</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Price</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">GST</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Total</span>
+                <span></span>
+              </div>
+              <div id="inv-lines"></div>
+              <button class="btn btn-ghost btn-sm mt" onclick="addInvLine()" style="width:100%;border:1.5px dashed var(--border);">+ Add Line</button>
+            </div>
+
+            <div class="form-group" style="margin-bottom:16px;">
+              <label>Payment Terms</label>
+              <select id="inv-payment-terms" onchange="updateDueDate()">
+                <option value="0">Due on receipt</option>
+                <option value="7">Net 7</option>
+                <option value="14">Net 14</option>
+                <option value="30" selected>Net 30</option>
+                <option value="60">Net 60</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Notes</label>
+              <textarea id="inv-notes" placeholder="Payment instructions, bank details, thank you message…" style="min-height:80px;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live preview / totals -->
+      <div>
+        <div class="card" style="position:sticky;top:136px;">
+          <div class="card-header"><span class="card-title">Summary</span></div>
+          <div class="card-body">
+            <div id="inv-summary" style="font-size:13px;"></div>
+            <div style="margin-top:20px;display:flex;flex-direction:column;gap:8px;">
+              <button class="btn btn-ghost btn-sm" style="color:var(--text);width:100%;" onclick="printInvoice()">🖨 Print / Save PDF</button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--text);width:100%;" id="inv-email-btn" onclick="emailInvoice()">✉ Email to Client</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /invoices-page -->
+
+<!-- MARK AS PAID MODAL -->
+<div class="modal-overlay" id="mark-paid-modal">
+  <div class="modal" style="width:520px;">
+    <h3>Mark Invoice as Paid</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px;">A transaction will be created in your ledger. Review and edit before saving.</p>
+    <input type="hidden" id="paid-invoice-id">
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Payment Date</label>
+          <input type="date" id="paid-date">
+        </div>
+        <div class="form-group">
+          <label>Amount Received ($)</label>
+          <input type="number" id="paid-amount" step="0.01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Debit Account (money received into)</label>
+        <select id="paid-debit-account">
+          <option value="1010">1010 Cash at Bank</option>
+          <option value="1020">1020 Accounts Receivable</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Credit Account</label>
+        <select id="paid-credit-account">
+          <option value="4010">4010 Sales Revenue</option>
+          <option value="4020">4020 Subscription Revenue</option>
+          <option value="4030">4030 Consulting Fees</option>
+          <option value="4040">4040 Other Revenue</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Reference</label>
+        <input type="text" id="paid-ref" placeholder="e.g. INV-001">
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="paid-desc">
+      </div>
+    </div>
+    <div class="flex-gap" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('mark-paid-modal')">Cancel</button>
+      <button class="btn btn-accent btn-sm" onclick="confirmMarkPaid()">✓ Mark Paid & Save Transaction</button>
+    </div>
+  </div>
+</div>
+
 </main><!-- /main -->
 
 <!-- ADD SOFTWARE MODAL -->
@@ -1330,6 +1592,7 @@
 
 <script src="db.js"></script>
 <script src="reconcile.js"></script>
+<script src="invoices.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
