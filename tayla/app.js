@@ -776,11 +776,11 @@ function addTxLine(type) {
   div.className = 'tx-line';
   div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;';
   div.innerHTML = `
-    <select id="tx-${type}-account-${count}" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+    <select id="tx-${type}-account-${count}" class="tx-account" onchange="validateTx();updateGstPreview()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
       ${buildAccountOptions()}
     </select>
-    <input type="number" id="tx-${type}-amount-${count}" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
-    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();validateTx()" style="padding:4px 8px;">✕</button>
+    <input type="number" id="tx-${type}-amount-${count}" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();validateTx();updateGstPreview()" style="padding:4px 8px;">✕</button>
   `;
   container.appendChild(div);
 }
@@ -839,24 +839,65 @@ function updateGstPreview() {
   const preview = document.getElementById('tx-gst-preview');
   if (!on) { preview.style.display = 'none'; return; }
 
-  // Collect debit totals
-  let totalDebits = 0;
+  // Collect current debit and credit lines
+  const rawDebits = [], rawCredits = [];
   document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
+    const acc = line.querySelector('select').value;
     const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
-    totalDebits += amt;
+    if (acc && amt > 0) rawDebits.push({ account: acc, amount: amt });
+  });
+  document.querySelectorAll('#tx-credit-lines .tx-line').forEach(line => {
+    const acc = line.querySelector('select').value;
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    if (acc && amt > 0) rawCredits.push({ account: acc, amount: amt });
   });
 
-  if (totalDebits === 0) { preview.style.display = 'none'; return; }
+  if (!rawDebits.length && !rawCredits.length) { preview.style.display = 'none'; return; }
 
-  const gst = +(totalDebits * .1).toFixed(2);
-  const net = +(totalDebits - gst).toFixed(2);
+  const isExpense = rawDebits.some(d => getAccount(d.account)?.type === 'expense');
+  const isRevenue = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
+
+  let lines = [];
+
+  if (isExpense) {
+    rawDebits.forEach(d => {
+      const acc = getAccount(d.account);
+      if (acc?.type === 'expense') {
+        const gst = +(d.amount / 11).toFixed(2);
+        const net = +(d.amount - gst).toFixed(2);
+        lines.push(`DR &nbsp;${d.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+        lines.push(`DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+      } else {
+        lines.push(`DR &nbsp;${d.account} ${getAccount(d.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
+      }
+    });
+    rawCredits.forEach(c => {
+      lines.push(`CR &nbsp;${c.account} ${getAccount(c.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
+    });
+  } else if (isRevenue) {
+    rawDebits.forEach(d => {
+      lines.push(`DR &nbsp;${d.account} ${getAccount(d.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
+    });
+    rawCredits.forEach(c => {
+      const acc = getAccount(c.account);
+      if (acc?.type === 'revenue') {
+        const gst = +(c.amount / 11).toFixed(2);
+        const net = +(c.amount - gst).toFixed(2);
+        lines.push(`CR &nbsp;${c.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+        lines.push(`CR &nbsp;2020 GST Payable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+      } else {
+        lines.push(`CR &nbsp;${c.account} ${getAccount(c.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
+      }
+    });
+  } else {
+    // No expense/revenue account detected yet
+    preview.style.display = 'block';
+    preview.innerHTML = `<span style="color:#856404;">⚠ Select an expense or revenue account to see GST split</span>`;
+    return;
+  }
 
   preview.style.display = 'block';
-  preview.innerHTML =
-    `✓ GST will be auto-split on save:<br>` +
-    `&nbsp;&nbsp;Gross amount: ${fmt(totalDebits)}<br>` +
-    `&nbsp;&nbsp;GST (10%) → 1030 GST Receivable / 2020 GST Payable: ${fmt(gst)}<br>` +
-    `&nbsp;&nbsp;Net amount posted to account: ${fmt(net)}`;
+  preview.innerHTML = `<strong>On save this entry will be posted as:</strong><br><span style="font-family:'DM Mono',monospace;font-size:11px;line-height:2;">${lines.join('<br>')}</span>`;
 }
 
 function addTransactionDoubleEntry() {
@@ -894,21 +935,18 @@ function addTransactionDoubleEntry() {
   // We split the 1/11th GST out of the expense/revenue lines and add the
   // appropriate GST account (1030 GST Receivable for purchases, 2020 GST Payable for sales).
   if (gstOn) {
-    const expenseTypes = ['expense'];
-    const revenueTypes = ['revenue'];
-
-    // Check if debits contain expense accounts (purchase) or credits contain revenue (sale)
-    const isExpense = rawDebits.some(d => expenseTypes.includes(getAccount(d.account)?.type));
-    const isRevenue = rawCredits.some(c => revenueTypes.includes(getAccount(c.account)?.type));
+    const isExpense = rawDebits.some(d => getAccount(d.account)?.type === 'expense');
+    const isRevenue = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
 
     if (isExpense) {
-      // Purchase: DR Expense (net) + DR 1030 GST Receivable (gst) | CR as-is
+      // Purchase: entered amount is GST-inclusive
+      // DR Expense (net) + DR 1030 GST Receivable | CR Bank as-is
       debits = [];
       let totalGst = 0;
       rawDebits.forEach(d => {
         const acc = getAccount(d.account);
-        if (expenseTypes.includes(acc?.type)) {
-          const gst = +(d.amount * .1).toFixed(2);
+        if (acc?.type === 'expense') {
+          const gst = +(d.amount / 11).toFixed(2);
           const net = +(d.amount - gst).toFixed(2);
           totalGst += gst;
           debits.push({ account: d.account, amount: net });
@@ -918,13 +956,14 @@ function addTransactionDoubleEntry() {
       });
       if (totalGst > 0) debits.push({ account: '1030', amount: totalGst });
     } else if (isRevenue) {
-      // Sale: DR as-is | CR Revenue (net) + CR 2020 GST Payable (gst)
+      // Sale: entered amount is GST-inclusive
+      // DR Bank as-is | CR Revenue (net) + CR 2020 GST Payable
       credits = [];
       let totalGst = 0;
       rawCredits.forEach(c => {
         const acc = getAccount(c.account);
-        if (revenueTypes.includes(acc?.type)) {
-          const gst = +(c.amount * .1).toFixed(2);
+        if (acc?.type === 'revenue') {
+          const gst = +(c.amount / 11).toFixed(2);
           const net = +(c.amount - gst).toFixed(2);
           totalGst += gst;
           credits.push({ account: c.account, amount: net });
@@ -1009,7 +1048,7 @@ function addJournalLine() {
   div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 40px;gap:8px;margin-bottom:8px;align-items:center;';
   div.dataset.lineId = lineId;
   div.innerHTML = `
-    <select class="journal-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+    <select class="journal-account" onchange="validateJournal();updateJournalGstPreview()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
       <option value="">Select Account...</option>
       ${Object.entries(CHART_OF_ACCOUNTS).map(([group, data]) => `
         <optgroup label="${group.toUpperCase()}">
@@ -1018,7 +1057,7 @@ function addJournalLine() {
       `).join('')}
     </select>
     <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#4f8ef7':'var(--border)';validateJournal();updateJournalGstPreview()">
-    <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#e8c547':'var(--border)';validateJournal()">
+    <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#e8c547':'var(--border)';validateJournal();updateJournalGstPreview()">
     <button class="btn btn-danger btn-sm" onclick="removeJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
   `;
   container.appendChild(div);
@@ -1086,18 +1125,50 @@ function updateJournalGstPreview() {
   const preview = document.getElementById('journal-gst-preview');
   if (!on) { preview.style.display = 'none'; return; }
 
-  let totalDebits = 0;
+  const rawLines = [];
   document.querySelectorAll('.journal-line').forEach(line => {
-    totalDebits += parseFloat(line.querySelector('.journal-debit').value) || 0;
+    const accountId = line.querySelector('.journal-account').value;
+    const debit  = parseFloat(line.querySelector('.journal-debit').value)  || 0;
+    const credit = parseFloat(line.querySelector('.journal-credit').value) || 0;
+    if (accountId && (debit > 0 || credit > 0)) {
+      rawLines.push({ accountId, debit, credit });
+    }
   });
 
-  if (totalDebits === 0) { preview.style.display = 'none'; return; }
-  const gst = +(totalDebits * .1).toFixed(2);
-  const net = +(totalDebits - gst).toFixed(2);
+  if (!rawLines.length) { preview.style.display = 'none'; return; }
+
+  const hasExpense = rawLines.some(l => getAccount(l.accountId)?.type === 'expense' && l.debit > 0);
+  const hasRevenue = rawLines.some(l => getAccount(l.accountId)?.type === 'revenue' && l.credit > 0);
+
+  if (!hasExpense && !hasRevenue) {
+    preview.style.display = 'block';
+    preview.innerHTML = `<span style="color:#856404;">⚠ Add an expense (debit) or revenue (credit) account to see GST split</span>`;
+    return;
+  }
+
+  const outputLines = [];
+  rawLines.forEach(l => {
+    const acc = getAccount(l.accountId);
+    const name = acc?.name || l.accountId;
+    if (acc?.type === 'expense' && l.debit > 0) {
+      const gst = +(l.debit / 11).toFixed(2);
+      const net = +(l.debit - gst).toFixed(2);
+      outputLines.push(`DR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+      outputLines.push(`DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+    } else if (acc?.type === 'revenue' && l.credit > 0) {
+      const gst = +(l.credit / 11).toFixed(2);
+      const net = +(l.credit - gst).toFixed(2);
+      outputLines.push(`CR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+      outputLines.push(`CR &nbsp;2020 GST Payable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+    } else {
+      const side = l.debit > 0 ? 'DR' : 'CR';
+      const amt  = l.debit > 0 ? l.debit : l.credit;
+      outputLines.push(`${side} &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(amt)}</strong>`);
+    }
+  });
+
   preview.style.display = 'block';
-  preview.innerHTML =
-    `✓ GST will be auto-split on save:<br>` +
-    `&nbsp;&nbsp;Gross: ${fmt(totalDebits)} → Net: ${fmt(net)} + GST: ${fmt(gst)}`;
+  preview.innerHTML = `<strong>On save this entry will be posted as:</strong><br><span style="font-family:'DM Mono',monospace;font-size:11px;line-height:2;">${outputLines.join('<br>')}</span>`;
 }
 
 function saveJournal() {
@@ -1131,19 +1202,18 @@ function saveJournal() {
     }
   });
 
-  // ── GST AUTO-SPLIT ──
   if (gstOn) {
     const finalLines = [];
     let gstDebit = 0, gstCredit = 0;
     lines.forEach(l => {
       const acc = getAccount(l.accountId);
       if (acc?.type === 'expense' && l.debit > 0) {
-        const gst = +(l.debit * .1).toFixed(2);
+        const gst = +(l.debit / 11).toFixed(2);
         const net = +(l.debit - gst).toFixed(2);
         gstDebit += gst;
         finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: net, credit: 0 });
       } else if (acc?.type === 'revenue' && l.credit > 0) {
-        const gst = +(l.credit * .1).toFixed(2);
+        const gst = +(l.credit / 11).toFixed(2);
         const net = +(l.credit - gst).toFixed(2);
         gstCredit += gst;
         finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: net });
@@ -1151,8 +1221,8 @@ function saveJournal() {
         finalLines.push(l);
       }
     });
-    if (gstDebit > 0) finalLines.push({ accountId: '1030', accountName: 'GST Receivable', debit: gstDebit, credit: 0 });
-    if (gstCredit > 0) finalLines.push({ accountId: '2020', accountName: 'GST Payable', debit: 0, credit: gstCredit });
+    if (gstDebit  > 0) finalLines.push({ accountId: '1030', accountName: 'GST Receivable', debit: gstDebit,  credit: 0 });
+    if (gstCredit > 0) finalLines.push({ accountId: '2020', accountName: 'GST Payable',    debit: 0, credit: gstCredit });
     lines = finalLines;
   }
   
