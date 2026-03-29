@@ -311,3 +311,24 @@
 }
 .suggestion-row:hover { border-color: var(--accent); background: var(--surface); }
 .suggestion-row.exact { border-color: var(--success); background: #f0fdf4; }
+
+/* ── INVOICES ── */
+.inv-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
+.inv-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
+
+.inv-status-draft   { background:#e2d9f3;color:#4a3072; }
+.inv-status-sent    { background:#d1ecf1;color:#0c5460; }
+.inv-status-paid    { background:#d4edda;color:#155724; }
+.inv-status-overdue { background:#fde2e2;color:#721c24; }
+
+.inv-line-row {
+  display: grid;
+  grid-template-columns: 2fr 80px 110px 80px 110px 36px;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+@media (max-width: 680px) {
+  .inv-line-row { grid-template-columns: 1fr 1fr; }
+}
