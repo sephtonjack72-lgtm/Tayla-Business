@@ -332,3 +332,16 @@
 @media (max-width: 680px) {
   .inv-line-row { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── BILLS ── */
+.bill-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
+.bill-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
+.bill-status-draft    { background:#e2d9f3;color:#4a3072; }
+.bill-status-received { background:#d1ecf1;color:#0c5460; }
+.bill-status-approved { background:#fff3cd;color:#856404; }
+.bill-status-paid     { background:#d4edda;color:#155724; }
+.bill-status-overdue  { background:#fde2e2;color:#721c24; }
+
+/* ── ASSETS ── */
+.asset-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
+.asset-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
