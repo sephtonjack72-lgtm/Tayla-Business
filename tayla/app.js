@@ -92,11 +92,11 @@ function applyProfileToApp(profile) {
       liabilities  = data.liabilities;
       softwareList = data.softwareList;
       // Load reconciliation data
-      if (typeof dbLoadBankAccounts === 'function') {
-        dbLoadBankAccounts().then(() => renderBankAccountsList());
-      }
-      if (typeof dbLoadContacts === 'function') dbLoadContacts();
-      if (typeof dbLoadInvoices === 'function') dbLoadInvoices();
+      if (typeof dbLoadBankAccounts === 'function') dbLoadBankAccounts().then(() => renderBankAccountsList());
+      if (typeof dbLoadContacts    === 'function') dbLoadContacts();
+      if (typeof dbLoadInvoices    === 'function') dbLoadInvoices();
+      if (typeof dbLoadBills       === 'function') dbLoadBills();
+      if (typeof dbLoadFixedAssets === 'function') dbLoadFixedAssets();
       renderAll();
     });
   });
@@ -696,12 +696,10 @@ function showPage(id) {
   } else {
     event.currentTarget.classList.add('active');
   }
-  if (id === 'reconcile-page' && typeof showReconTab === 'function') {
-    showReconTab('accounts');
-  }
-  if (id === 'invoices-page' && typeof showInvTab === 'function') {
-    showInvTab('list');
-  }
+  if (id === 'reconcile-page' && typeof showReconTab  === 'function') showReconTab('accounts');
+  if (id === 'invoices-page'  && typeof showInvTab    === 'function') showInvTab('list');
+  if (id === 'bills-page'     && typeof showBillTab   === 'function') showBillTab('list');
+  if (id === 'assets-page'    && typeof showAssetTab  === 'function') showAssetTab('register');
   renderAll();
 }
 
