@@ -108,6 +108,37 @@ function showOverlay(which) {
 
 // ── Show different auth panels
 function showAuthPanel(panel) {
+  // Reset signup panel back to form if navigating to it fresh
+  if (panel === 'signup') {
+    document.getElementById('signup-panel').innerHTML = `
+      <div style="text-align:left;margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Email</label>
+        <input type="email" id="signup-email" placeholder="you@example.com"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);">
+      </div>
+      <div style="text-align:left;margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Password</label>
+        <input type="password" id="signup-password" placeholder="Min. 8 characters"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);">
+      </div>
+      <div style="text-align:left;margin-bottom:20px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Confirm Password</label>
+        <input type="password" id="signup-confirm" placeholder="Repeat password"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
+          onkeydown="if(event.key==='Enter')attemptSignup()">
+      </div>
+      <div id="signup-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;text-align:left;"></div>
+      <button onclick="attemptSignup()" style="
+        width:100%;padding:13px;background:var(--accent);color:#fff;
+        border:none;border-radius:8px;font-size:14px;font-weight:600;
+        font-family:'DM Sans',sans-serif;cursor:pointer;">
+        Create Account
+      </button>
+      <div style="margin-top:14px;text-align:center;">
+        <button onclick="showAuthPanel('login')" style="background:none;border:none;font-size:13px;color:var(--accent3);font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">← Back to sign in</button>
+      </div>
+    `;
+  }
   document.getElementById('login-panel').style.display  = panel === 'login'  ? 'block' : 'none';
   document.getElementById('signup-panel').style.display = panel === 'signup' ? 'block' : 'none';
   document.getElementById('reset-panel').style.display  = panel === 'reset'  ? 'block' : 'none';
@@ -139,15 +170,49 @@ async function attemptSignup() {
   const pw      = document.getElementById('signup-password').value;
   const confirm = document.getElementById('signup-confirm').value;
   const errEl   = document.getElementById('signup-error');
+  const btn     = document.querySelector('#signup-panel button[onclick="attemptSignup()"]');
   errEl.style.display = 'none';
   if (!email || !pw) { errEl.textContent = 'Please fill in all fields.'; errEl.style.display = 'block'; return; }
   if (pw.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.style.display = 'block'; return; }
   if (pw !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+  if (btn) { btn.textContent = 'Creating account…'; btn.disabled = true; }
   const { error } = await _supabase.auth.signUp({ email, password: pw });
+  if (btn) { btn.textContent = 'Create Account'; btn.disabled = false; }
   if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
-  errEl.style.background = '#d4edda'; errEl.style.color = '#155724';
-  errEl.textContent = '✓ Account created! Check your email to confirm, then sign in.';
-  errEl.style.display = 'block';
+
+  // Replace signup panel with confirmation banner
+  document.getElementById('signup-panel').innerHTML = `
+    <div style="text-align:center;padding:12px 0;">
+      <div style="font-size:48px;margin-bottom:16px;">📬</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--accent);margin-bottom:10px;">
+        Check your inbox
+      </div>
+      <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:8px;">
+        We sent a confirmation link to
+      </div>
+      <div style="font-size:14px;font-weight:600;color:var(--accent);margin-bottom:20px;word-break:break-all;">
+        ${email}
+      </div>
+      <div style="background:var(--surface2);border-radius:10px;padding:16px;font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:24px;text-align:left;">
+        <strong>Next steps:</strong><br>
+        1. Open the email from Tayla Business<br>
+        2. Click <strong>Confirm your email</strong><br>
+        3. Come back here and sign in
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">
+        Didn't get it? Check your spam folder, or
+      </div>
+      <button onclick="showAuthPanel('signup')" style="background:none;border:none;font-size:13px;color:var(--accent3);font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;">
+        try a different email address
+      </button>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+        <button onclick="showAuthPanel('login')" style="background:none;border:none;font-size:13px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;">
+          ← Back to sign in
+        </button>
+      </div>
+    </div>
+  `;
+  document.getElementById('login-subtitle').textContent = 'Confirm your email to continue';
 }
 
 // ── Reset Password
