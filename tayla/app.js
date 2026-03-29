@@ -516,13 +516,13 @@ const CHART_OF_ACCOUNTS = {
   assets: {
     code: '1',
     accounts: [
-      { id: '1010', name: 'Cash at Bank', type: 'asset', gst: false },
-      { id: '1020', name: 'Accounts Receivable', type: 'asset', gst: false },
-      { id: '1030', name: 'GST Receivable', type: 'asset', gst: false },
-      { id: '1100', name: 'Inventory', type: 'asset', gst: false },
-      { id: '1500', name: 'Plant & Equipment', type: 'asset', gst: false },
-      { id: '1510', name: 'Accumulated Depreciation - PPE', type: 'asset', gst: false, contra: true },
-      { id: '1600', name: 'Intangible Assets', type: 'asset', gst: false },
+      { id: '1010', name: 'Cash at Bank',                   type: 'asset', gst: false },
+      { id: '1020', name: 'Accounts Receivable',             type: 'asset', gst: false },
+      { id: '1030', name: 'GST Receivable',                  type: 'asset', gst: false },
+      { id: '1100', name: 'Inventory',                       type: 'asset', gst: true  },
+      { id: '1500', name: 'Plant & Equipment',               type: 'asset', gst: true  },
+      { id: '1510', name: 'Accumulated Depreciation - PPE',  type: 'asset', gst: false, contra: true },
+      { id: '1600', name: 'Intangible Assets',               type: 'asset', gst: true  },
     ]
   },
   liabilities: {
@@ -854,43 +854,63 @@ function updateGstPreview() {
 
   if (!rawDebits.length && !rawCredits.length) { preview.style.display = 'none'; return; }
 
-  const isExpense = rawDebits.some(d => getAccount(d.account)?.type === 'expense');
-  const isRevenue = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
+  const isGstDebit  = rawDebits.some(d  => { const a = getAccount(d.account); return a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true); });
+  const isGstCredit = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
 
   let lines = [];
 
-  if (isExpense) {
+  if (isGstDebit) {
     rawDebits.forEach(d => {
       const acc = getAccount(d.account);
-      if (acc?.type === 'expense') {
-        const gst = +(d.amount / 11).toFixed(2);
-        const net = +(d.amount - gst).toFixed(2);
-        lines.push(`DR &nbsp;${d.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+      if (acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true)) {
+        const gst   = +(d.amount / 9).toFixed(2);
+        const gross = +(d.amount + gst).toFixed(2);
+        lines.push(`DR &nbsp;${d.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong> (net)`);
         lines.push(`DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+        lines.push(`CR &nbsp;[bank/credit account] &nbsp;&nbsp;<strong>${fmt(gross)}</strong> (gross)`);
       } else {
         lines.push(`DR &nbsp;${d.account} ${getAccount(d.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
       }
     });
     rawCredits.forEach(c => {
-      lines.push(`CR &nbsp;${c.account} ${getAccount(c.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
+      const acc = getAccount(c.account);
+      if (acc?.type === 'asset' && !acc?.gst) {
+        // Show the grossed-up bank amount
+        const totalGst = rawDebits.reduce((s, d) => {
+          const a = getAccount(d.account);
+          return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst)) ? s + +(d.amount / 9).toFixed(2) : s;
+        }, 0);
+        lines.push(`CR &nbsp;${c.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(+(c.amount + totalGst).toFixed(2))}</strong> (gross)`);
+      } else {
+        lines.push(`CR &nbsp;${c.account} ${acc?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
+      }
     });
-  } else if (isRevenue) {
+  } else if (isGstCredit) {
     rawDebits.forEach(d => {
-      lines.push(`DR &nbsp;${d.account} ${getAccount(d.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
+      const acc = getAccount(d.account);
+      if (acc?.type === 'asset' && !acc?.gst) {
+        const totalGst = rawCredits.reduce((s, c) => {
+          const a = getAccount(c.account);
+          return a?.type === 'revenue' ? s + +(c.amount / 9).toFixed(2) : s;
+        }, 0);
+        lines.push(`DR &nbsp;${d.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(+(d.amount + totalGst).toFixed(2))}</strong> (gross)`);
+      } else {
+        lines.push(`DR &nbsp;${d.account} ${acc?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
+      }
     });
     rawCredits.forEach(c => {
       const acc = getAccount(c.account);
       if (acc?.type === 'revenue') {
-        const gst = +(c.amount / 11).toFixed(2);
-        const net = +(c.amount - gst).toFixed(2);
-        lines.push(`CR &nbsp;${c.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+        const gst   = +(c.amount / 9).toFixed(2);
+        const gross = +(c.amount + gst).toFixed(2);
+        lines.push(`CR &nbsp;${c.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong> (net)`);
         lines.push(`CR &nbsp;2020 GST Payable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+        lines.push(`DR &nbsp;[bank/debit account] &nbsp;&nbsp;<strong>${fmt(gross)}</strong> (gross)`);
       } else {
         lines.push(`CR &nbsp;${c.account} ${getAccount(c.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
       }
     });
   } else {
-    // No expense/revenue account detected yet
     preview.style.display = 'block';
     preview.innerHTML = `<span style="color:#856404;">⚠ Select an expense or revenue account to see GST split</span>`;
     return;
@@ -935,43 +955,59 @@ function addTransactionDoubleEntry() {
   // We split the 1/11th GST out of the expense/revenue lines and add the
   // appropriate GST account (1030 GST Receivable for purchases, 2020 GST Payable for sales).
   if (gstOn) {
-    const isExpense = rawDebits.some(d => getAccount(d.account)?.type === 'expense');
-    const isRevenue = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
+    // GST split triggers on: expense accounts OR gst:true asset accounts (PPE, Inventory, Intangibles)
+    const isGstDebit  = rawDebits.some(d  => { const a = getAccount(d.account); return a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true); });
+    const isGstCredit = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
 
-    if (isExpense) {
-      // Purchase: entered amount is GST-inclusive
-      // DR Expense (net) + DR 1030 GST Receivable | CR Bank as-is
+    if (isGstDebit) {
+      // User entered net (ex-GST) amount on the asset/expense side
+      // DR Asset/Expense (entered)  +  DR 1030 GST (10%)  |  CR Bank (gross = entered × 1.1)
       debits = [];
       let totalGst = 0;
       rawDebits.forEach(d => {
         const acc = getAccount(d.account);
-        if (acc?.type === 'expense') {
-          const gst = +(d.amount / 11).toFixed(2);
-          const net = +(d.amount - gst).toFixed(2);
+        if (acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true)) {
+          const gst = +(d.amount / 9).toFixed(2);
           totalGst += gst;
-          debits.push({ account: d.account, amount: net });
+          debits.push({ account: d.account, amount: d.amount }); // keep net as entered
         } else {
           debits.push(d);
         }
       });
       if (totalGst > 0) debits.push({ account: '1030', amount: totalGst });
-    } else if (isRevenue) {
-      // Sale: entered amount is GST-inclusive
-      // DR Bank as-is | CR Revenue (net) + CR 2020 GST Payable
+      // Gross up the credit (bank) side to balance
+      credits = rawCredits.map(c => {
+        const acc = getAccount(c.account);
+        if (acc?.type === 'asset' && !acc?.gst) {
+          // Cash/bank account — gross up by total GST
+          return { account: c.account, amount: +(c.amount + totalGst).toFixed(2) };
+        }
+        return c;
+      });
+    } else if (isGstCredit) {
+      // User entered net (ex-GST) amount on the revenue side
+      // DR Bank (gross = entered × 1.1)  |  CR Revenue (entered)  +  CR 2020 GST (10%)
       credits = [];
       let totalGst = 0;
       rawCredits.forEach(c => {
         const acc = getAccount(c.account);
         if (acc?.type === 'revenue') {
-          const gst = +(c.amount / 11).toFixed(2);
-          const net = +(c.amount - gst).toFixed(2);
+          const gst = +(c.amount / 9).toFixed(2);
           totalGst += gst;
-          credits.push({ account: c.account, amount: net });
+          credits.push({ account: c.account, amount: c.amount }); // keep net as entered
         } else {
           credits.push(c);
         }
       });
       if (totalGst > 0) credits.push({ account: '2020', amount: totalGst });
+      // Gross up the debit (bank) side to balance
+      debits = rawDebits.map(d => {
+        const acc = getAccount(d.account);
+        if (acc?.type === 'asset' && !acc?.gst) {
+          return { account: d.account, amount: +(d.amount + totalGst).toFixed(2) };
+        }
+        return d;
+      });
     }
   }
 
@@ -1137,29 +1173,38 @@ function updateJournalGstPreview() {
 
   if (!rawLines.length) { preview.style.display = 'none'; return; }
 
-  const hasExpense = rawLines.some(l => getAccount(l.accountId)?.type === 'expense' && l.debit > 0);
-  const hasRevenue = rawLines.some(l => getAccount(l.accountId)?.type === 'revenue' && l.credit > 0);
+  const hasGstDebit = rawLines.some(l => { const a = getAccount(l.accountId); return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true)) && l.debit > 0; });
+  const hasRevenue  = rawLines.some(l => getAccount(l.accountId)?.type === 'revenue' && l.credit > 0);
 
-  if (!hasExpense && !hasRevenue) {
+  if (!hasGstDebit && !hasRevenue) {
     preview.style.display = 'block';
-    preview.innerHTML = `<span style="color:#856404;">⚠ Add an expense (debit) or revenue (credit) account to see GST split</span>`;
+    preview.innerHTML = `<span style="color:#856404;">⚠ Add an expense, PPE or revenue account to see GST split</span>`;
     return;
   }
 
   const outputLines = [];
+  // Calculate total GST for grossing up bank lines
+  const totalGstDebit  = rawLines.reduce((s, l) => { const a = getAccount(l.accountId); return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true)) && l.debit  > 0 ? s + +(l.debit  / 9).toFixed(2) : s; }, 0);
+  const totalGstCredit = rawLines.reduce((s, l) => { const a = getAccount(l.accountId); return a?.type === 'revenue' && l.credit > 0 ? s + +(l.credit / 9).toFixed(2) : s; }, 0);
+
   rawLines.forEach(l => {
     const acc = getAccount(l.accountId);
     const name = acc?.name || l.accountId;
-    if (acc?.type === 'expense' && l.debit > 0) {
-      const gst = +(l.debit / 11).toFixed(2);
-      const net = +(l.debit - gst).toFixed(2);
-      outputLines.push(`DR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+    const isGstDebitAccount = acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true);
+    if (isGstDebitAccount && l.debit > 0) {
+      const gst = +(l.debit / 9).toFixed(2);
+      outputLines.push(`DR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(l.debit)}</strong> (net)`);
       outputLines.push(`DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
     } else if (acc?.type === 'revenue' && l.credit > 0) {
-      const gst = +(l.credit / 11).toFixed(2);
-      const net = +(l.credit - gst).toFixed(2);
-      outputLines.push(`CR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(net)}</strong> (net)`);
+      const gst = +(l.credit / 9).toFixed(2);
+      outputLines.push(`CR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(l.credit)}</strong> (net)`);
       outputLines.push(`CR &nbsp;2020 GST Payable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
+    } else if (acc?.type === 'asset' && !acc?.gst && l.credit > 0 && totalGstDebit > 0) {
+      // Bank credit — show grossed up
+      outputLines.push(`CR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(+(l.credit + totalGstDebit).toFixed(2))}</strong> (gross)`);
+    } else if (acc?.type === 'asset' && !acc?.gst && l.debit > 0 && totalGstCredit > 0) {
+      // Bank debit — show grossed up
+      outputLines.push(`DR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(+(l.debit + totalGstCredit).toFixed(2))}</strong> (gross)`);
     } else {
       const side = l.debit > 0 ? 'DR' : 'CR';
       const amt  = l.debit > 0 ? l.debit : l.credit;
@@ -1207,16 +1252,21 @@ function saveJournal() {
     let gstDebit = 0, gstCredit = 0;
     lines.forEach(l => {
       const acc = getAccount(l.accountId);
-      if (acc?.type === 'expense' && l.debit > 0) {
-        const gst = +(l.debit / 11).toFixed(2);
-        const net = +(l.debit - gst).toFixed(2);
+      const isGstDebitAccount = acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true);
+      if (isGstDebitAccount && l.debit > 0) {
+        const gst = +(l.debit / 9).toFixed(2);
         gstDebit += gst;
-        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: net, credit: 0 });
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: l.debit, credit: 0 });
       } else if (acc?.type === 'revenue' && l.credit > 0) {
-        const gst = +(l.credit / 11).toFixed(2);
-        const net = +(l.credit - gst).toFixed(2);
+        const gst = +(l.credit / 9).toFixed(2);
         gstCredit += gst;
-        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: net });
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: l.credit });
+      } else if ((acc?.type === 'asset' && !acc?.gst) && l.credit > 0 && gstDebit > 0) {
+        // Bank/cash credit side — gross up by total GST to keep entry balanced
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: +(l.credit + gstDebit).toFixed(2) });
+      } else if ((acc?.type === 'asset' && !acc?.gst) && l.debit > 0 && gstCredit > 0) {
+        // Bank/cash debit side for revenue — gross up
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: +(l.debit + gstCredit).toFixed(2), credit: 0 });
       } else {
         finalLines.push(l);
       }
