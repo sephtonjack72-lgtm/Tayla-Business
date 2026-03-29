@@ -790,13 +790,13 @@ function validateTx() {
   let debitAccounts = 0, creditAccounts = 0;
   
   document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
-    const acc = line.querySelector('select').value;
+    const acc = line.classList.contains('gst-auto-line') ? line.dataset.account : line.querySelector('select').value;
     const amt = parseFloat(line.querySelector('input').value) || 0;
     if (acc && amt > 0) { totalDebits += amt; debitAccounts++; }
   });
   
   document.querySelectorAll('#tx-credit-lines .tx-line').forEach(line => {
-    const acc = line.querySelector('select').value;
+    const acc = line.classList.contains('gst-auto-line') ? line.dataset.account : line.querySelector('select').value;
     const amt = parseFloat(line.querySelector('input').value) || 0;
     if (acc && amt > 0) { totalCredits += amt; creditAccounts++; }
   });
@@ -828,9 +828,15 @@ function validateTx() {
 function onGstToggle() {
   const on = document.getElementById('tx-gst-toggle').checked;
   const slider = document.getElementById('tx-gst-slider');
-  const knob = document.getElementById('tx-gst-knob');
+  const knob   = document.getElementById('tx-gst-knob');
   slider.style.background = on ? 'var(--success)' : 'var(--border)';
   knob.style.left = on ? '23px' : '3px';
+  if (!on) {
+    // Remove any injected GST lines
+    injectGstLine('debit', null);
+    injectGstLine('credit', null);
+    document.getElementById('tx-gst-preview').style.display = 'none';
+  }
   updateGstPreview();
 }
 
@@ -854,70 +860,65 @@ function updateGstPreview() {
 
   if (!rawDebits.length && !rawCredits.length) { preview.style.display = 'none'; return; }
 
-  const isGstDebit  = rawDebits.some(d  => { const a = getAccount(d.account); return a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true); });
+  const isGstDebit  = rawDebits.some(d => { const a = getAccount(d.account); return a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true); });
   const isGstCredit = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
 
-  let lines = [];
-
-  if (isGstDebit) {
-    rawDebits.forEach(d => {
-      const acc = getAccount(d.account);
-      if (acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true)) {
-        const gst   = +(d.amount / 9).toFixed(2);
-        const gross = +(d.amount + gst).toFixed(2);
-        lines.push(`DR &nbsp;${d.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong> (net)`);
-        lines.push(`DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
-        lines.push(`CR &nbsp;[bank/credit account] &nbsp;&nbsp;<strong>${fmt(gross)}</strong> (gross)`);
-      } else {
-        lines.push(`DR &nbsp;${d.account} ${getAccount(d.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
-      }
-    });
-    rawCredits.forEach(c => {
-      const acc = getAccount(c.account);
-      if (acc?.type === 'asset' && !acc?.gst) {
-        // Show the grossed-up bank amount
-        const totalGst = rawDebits.reduce((s, d) => {
-          const a = getAccount(d.account);
-          return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst)) ? s + +(d.amount / 9).toFixed(2) : s;
-        }, 0);
-        lines.push(`CR &nbsp;${c.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(+(c.amount + totalGst).toFixed(2))}</strong> (gross)`);
-      } else {
-        lines.push(`CR &nbsp;${c.account} ${acc?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
-      }
-    });
-  } else if (isGstCredit) {
-    rawDebits.forEach(d => {
-      const acc = getAccount(d.account);
-      if (acc?.type === 'asset' && !acc?.gst) {
-        const totalGst = rawCredits.reduce((s, c) => {
-          const a = getAccount(c.account);
-          return a?.type === 'revenue' ? s + +(c.amount / 9).toFixed(2) : s;
-        }, 0);
-        lines.push(`DR &nbsp;${d.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(+(d.amount + totalGst).toFixed(2))}</strong> (gross)`);
-      } else {
-        lines.push(`DR &nbsp;${d.account} ${acc?.name || ''} &nbsp;&nbsp;<strong>${fmt(d.amount)}</strong>`);
-      }
-    });
-    rawCredits.forEach(c => {
-      const acc = getAccount(c.account);
-      if (acc?.type === 'revenue') {
-        const gst   = +(c.amount / 9).toFixed(2);
-        const gross = +(c.amount + gst).toFixed(2);
-        lines.push(`CR &nbsp;${c.account} ${acc.name} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong> (net)`);
-        lines.push(`CR &nbsp;2020 GST Payable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
-        lines.push(`DR &nbsp;[bank/debit account] &nbsp;&nbsp;<strong>${fmt(gross)}</strong> (gross)`);
-      } else {
-        lines.push(`CR &nbsp;${c.account} ${getAccount(c.account)?.name || ''} &nbsp;&nbsp;<strong>${fmt(c.amount)}</strong>`);
-      }
-    });
-  } else {
+  if (!isGstDebit && !isGstCredit) {
     preview.style.display = 'block';
-    preview.innerHTML = `<span style="color:#856404;">⚠ Select an expense or revenue account to see GST split</span>`;
+    preview.innerHTML = `<span style="color:#856404;">⚠ Select an expense, PPE or revenue account to auto-split GST</span>`;
+    injectGstLine('debit', null); // remove any stale injected line
+    injectGstLine('credit', null);
     return;
   }
 
+  if (isGstDebit) {
+    const totalNet = rawDebits.reduce((s, d) => { const a = getAccount(d.account); return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true)) ? s + d.amount : s; }, 0);
+    const gst      = +(totalNet / 9).toFixed(2);
+    const gross    = +(totalNet + gst).toFixed(2);
+    injectGstLine('debit', { account: '1030', amount: gst });
+    preview.style.display = 'block';
+    preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your credit (bank/payment).`;
+  } else if (isGstCredit) {
+    const totalNet = rawCredits.reduce((s, c) => { const a = getAccount(c.account); return a?.type === 'revenue' ? s + c.amount : s; }, 0);
+    const gst      = +(totalNet / 9).toFixed(2);
+    const gross    = +(totalNet + gst).toFixed(2);
+    injectGstLine('credit', { account: '2020', amount: gst });
+    preview.style.display = 'block';
+    preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your debit (bank/receipt).`;
+  }
+
   preview.style.display = 'block';
-  preview.innerHTML = `<strong>On save this entry will be posted as:</strong><br><span style="font-family:'DM Mono',monospace;font-size:11px;line-height:2;">${lines.join('<br>')}</span>`;
+}
+
+// Inject or update the auto-GST line in the debit or credit container.
+// Pass null as line to remove it.
+function injectGstLine(side, line) {
+  const container = document.getElementById(`tx-${side}-lines`);
+  if (!container) return;
+
+  // Remove existing injected GST line if present
+  const existing = container.querySelector('.gst-auto-line');
+  if (existing) existing.remove();
+
+  if (!line) return;
+
+  const accName = getAccount(line.account)?.name || line.account;
+  const div = document.createElement('div');
+  div.className = 'tx-line gst-auto-line';
+  div.dataset.account = line.account;
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;';
+  div.innerHTML = `
+    <div style="padding:8px 12px;border:1.5px solid var(--accent2);border-radius:8px;font-size:13px;background:rgba(232,197,71,.1);color:var(--text);font-weight:500;">
+      ${line.account} ${accName} <span style="font-size:11px;color:var(--text3);">(auto)</span>
+    </div>
+    <input type="number" value="${line.amount}" step="0.01" min="0"
+      style="padding:8px 12px;border:1.5px solid var(--accent2);border-radius:8px;font-size:13px;background:rgba(232,197,71,.08);"
+      oninput="validateTx()" readonly>
+    <div style="width:40px;"></div>
+  `;
+  container.appendChild(div);
+  validateTx();
+}
 }
 
 function addTransactionDoubleEntry() {
@@ -929,15 +930,19 @@ function addTransactionDoubleEntry() {
 
   if (!date || !desc) { toast('Please fill in date and description'); return; }
 
-  // Collect raw lines
+  // Collect raw lines — including any auto-injected GST lines
   const rawDebits = [], rawCredits = [];
   document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
-    const acc = line.querySelector('select').value;
+    const acc = line.classList.contains('gst-auto-line')
+      ? line.dataset.account
+      : line.querySelector('select').value;
     const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
     if (acc && amt > 0) rawDebits.push({ account: acc, amount: amt });
   });
   document.querySelectorAll('#tx-credit-lines .tx-line').forEach(line => {
-    const acc = line.querySelector('select').value;
+    const acc = line.classList.contains('gst-auto-line')
+      ? line.dataset.account
+      : line.querySelector('select').value;
     const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
     if (acc && amt > 0) rawCredits.push({ account: acc, amount: amt });
   });
@@ -946,72 +951,12 @@ function addTransactionDoubleEntry() {
     toast('Need at least 1 debit and 1 credit line'); return;
   }
 
-  let debits = [...rawDebits];
-  let credits = [...rawCredits];
+  // GST line is already injected into the DOM by injectGstLine() when toggle is on
+  // Just read all lines as-is — including the auto GST line
+  const debits  = rawDebits;
+  const credits = rawCredits;
 
-  // ── GST AUTO-SPLIT ──
-  // When GST is on, we determine if this looks like an expense or revenue
-  // by checking whether the debit or credit side has a revenue/expense account.
-  // We split the 1/11th GST out of the expense/revenue lines and add the
-  // appropriate GST account (1030 GST Receivable for purchases, 2020 GST Payable for sales).
-  if (gstOn) {
-    // GST split triggers on: expense accounts OR gst:true asset accounts (PPE, Inventory, Intangibles)
-    const isGstDebit  = rawDebits.some(d  => { const a = getAccount(d.account); return a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true); });
-    const isGstCredit = rawCredits.some(c => getAccount(c.account)?.type === 'revenue');
-
-    if (isGstDebit) {
-      // User entered net (ex-GST) amount on the asset/expense side
-      // DR Asset/Expense (entered)  +  DR 1030 GST (10%)  |  CR Bank (gross = entered × 1.1)
-      debits = [];
-      let totalGst = 0;
-      rawDebits.forEach(d => {
-        const acc = getAccount(d.account);
-        if (acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true)) {
-          const gst = +(d.amount / 9).toFixed(2);
-          totalGst += gst;
-          debits.push({ account: d.account, amount: d.amount }); // keep net as entered
-        } else {
-          debits.push(d);
-        }
-      });
-      if (totalGst > 0) debits.push({ account: '1030', amount: totalGst });
-      // Gross up the credit (bank) side to balance
-      credits = rawCredits.map(c => {
-        const acc = getAccount(c.account);
-        if (acc?.type === 'asset' && !acc?.gst) {
-          // Cash/bank account — gross up by total GST
-          return { account: c.account, amount: +(c.amount + totalGst).toFixed(2) };
-        }
-        return c;
-      });
-    } else if (isGstCredit) {
-      // User entered net (ex-GST) amount on the revenue side
-      // DR Bank (gross = entered × 1.1)  |  CR Revenue (entered)  +  CR 2020 GST (10%)
-      credits = [];
-      let totalGst = 0;
-      rawCredits.forEach(c => {
-        const acc = getAccount(c.account);
-        if (acc?.type === 'revenue') {
-          const gst = +(c.amount / 9).toFixed(2);
-          totalGst += gst;
-          credits.push({ account: c.account, amount: c.amount }); // keep net as entered
-        } else {
-          credits.push(c);
-        }
-      });
-      if (totalGst > 0) credits.push({ account: '2020', amount: totalGst });
-      // Gross up the debit (bank) side to balance
-      debits = rawDebits.map(d => {
-        const acc = getAccount(d.account);
-        if (acc?.type === 'asset' && !acc?.gst) {
-          return { account: d.account, amount: +(d.amount + totalGst).toFixed(2) };
-        }
-        return d;
-      });
-    }
-  }
-
-  // Validate balance after GST split
+  // Validate balance
   const totalD = debits.reduce((s, d) => s + d.amount, 0);
   const totalC = credits.reduce((s, c) => s + c.amount, 0);
   if (Math.abs(totalD - totalC) > 0.02) {
