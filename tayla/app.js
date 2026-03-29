@@ -91,6 +91,10 @@ function applyProfileToApp(profile) {
       assets       = data.assets;
       liabilities  = data.liabilities;
       softwareList = data.softwareList;
+      // Load reconciliation data
+      if (typeof dbLoadBankAccounts === 'function') {
+        dbLoadBankAccounts().then(() => renderBankAccountsList());
+      }
       renderAll();
     });
   });
@@ -913,7 +917,7 @@ function injectGstLine(side, line) {
     </div>
     <input type="number" value="${line.amount}" step="0.01" min="0"
       style="padding:8px 12px;border:1.5px solid var(--accent2);border-radius:8px;font-size:13px;background:rgba(232,197,71,.08);"
-      oninput="validateTx()" readonly>
+      oninput="validateTx();updateGstPreview()" title="Editable — adjust if GST differs due to rounding">
     <div style="width:40px;"></div>
   `;
   container.appendChild(div);
@@ -979,6 +983,7 @@ function addTransactionDoubleEntry() {
 
   transactions.unshift(newTx);
   dbSaveTransaction(newTx);
+  if (typeof afterTransactionSave === 'function') afterTransactionSave(newTx);
   renderAll();
 
   // Reset form
