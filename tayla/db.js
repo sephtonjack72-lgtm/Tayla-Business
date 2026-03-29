@@ -68,46 +68,45 @@ async function dbLoadAll() {
       _supabase.from('software_monthly_users').select('*'),
     ]);
 
-    // Check for errors
     const errors = [txRes, jRes, aRes, lRes, swRes, tierRes, muRes]
       .map(r => r.error).filter(Boolean);
     if (errors.length) throw errors[0];
 
-    // Transform journals — attach lines
+    // Remap description → desc for app compatibility
+    const txData = (txRes.data || []).map(({ description, ...rest }) => ({ ...rest, desc: description }));
+
     const journalsData = (jRes.data || []).map(j => ({
       ...j,
       lines: j.journal_lines || [],
     }));
 
-    // Transform softwareList — attach tiers and monthly users
     const softwareData = (swRes.data || []).map(sw => {
       const tiers = (tierRes.data || []).filter(t => t.software_id === sw.id);
       const allMU = (muRes.data || []).filter(m => m.software_id === sw.id);
-
-      // Rebuild monthlyUsers object: { MON: { free: n, staff: n, [tierId]: n } }
       const monthlyUsers = {};
       allMU.forEach(m => {
         if (!monthlyUsers[m.month_key]) monthlyUsers[m.month_key] = {};
-        monthlyUsers[m.month_key][m.tier_id || 'free'] = m.count;
-        if (m.free_count  != null) monthlyUsers[m.month_key]['free']  = m.free_count;
-        if (m.staff_count != null) monthlyUsers[m.month_key]['staff'] = m.staff_count;
+        monthlyUsers[m.month_key]['free']  = m.free_count  || 0;
+        monthlyUsers[m.month_key]['staff'] = m.staff_count || 0;
+        try {
+          const tc = typeof m.tier_counts === 'string' ? JSON.parse(m.tier_counts) : (m.tier_counts || {});
+          Object.assign(monthlyUsers[m.month_key], tc);
+        } catch {}
       });
-
       return { id: sw.id, name: sw.name, tiers, monthlyUsers };
     });
 
-    // Cache for offline use
-    cacheSet('transactions', txRes.data || []);
-    cacheSet('journals', journalsData);
-    cacheSet('assets', aRes.data || []);
-    cacheSet('liabilities', lRes.data || []);
+    cacheSet('transactions', txData);
+    cacheSet('journals',     journalsData);
+    cacheSet('assets',       aRes.data || []);
+    cacheSet('liabilities',  lRes.data || []);
     cacheSet('softwareList', softwareData);
 
     return {
-      transactions: txRes.data || [],
+      transactions: txData,
       journals:     journalsData,
-      assets:       aRes.data || [],
-      liabilities:  lRes.data || [],
+      assets:       aRes.data  || [],
+      liabilities:  lRes.data  || [],
       softwareList: softwareData,
     };
 
@@ -133,13 +132,13 @@ function loadAllFromCache() {
 // ══════════════════════════════════════════════════════
 
 async function dbSaveTransaction(tx) {
-  // Always update cache immediately
   const idx = transactions.findIndex(t => t.id === tx.id);
   if (idx >= 0) transactions[idx] = tx; else transactions.unshift(tx);
   cacheSet('transactions', transactions);
 
   if (!_businessId) return;
-  const row = { ...tx, business_id: _businessId };
+  const { desc, ...rest } = tx;
+  const row = { ...rest, description: desc, business_id: _businessId };
   const { error } = await _supabase.from('transactions').upsert(row, { onConflict: 'id' });
   if (error) console.error('Transaction save failed:', error);
 }
@@ -323,7 +322,7 @@ async function dbMigrateFromLocalStorage() {
   try {
     // Transactions
     if (localTxns.length) {
-      const rows = localTxns.map(t => ({ ...t, business_id: _businessId }));
+      const rows = localTxns.map(({ desc, ...rest }) => ({ ...rest, description: desc, business_id: _businessId }));
       await _supabase.from('transactions').insert(rows);
     }
 
