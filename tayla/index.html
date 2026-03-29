@@ -186,6 +186,13 @@
 </head>
 <body>
 
+<!-- ── SUPABASE SDK ── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- ══════════════════════════════════════════════════════
+     AUTH / SETUP OVERLAY SYSTEM
+     ══════════════════════════════════════════════════════ -->
+
 <!-- ── LOGIN OVERLAY ── -->
 <div id="login-overlay" style="
   position:fixed;inset:0;z-index:9999;
@@ -194,62 +201,692 @@
 ">
   <div style="
     background:var(--surface);border-radius:16px;
-    padding:48px 40px;width:380px;max-width:90vw;
+    padding:48px 40px;width:400px;max-width:92vw;
     box-shadow:0 20px 60px rgba(0,0,0,.35);
     text-align:center;
   ">
     <div style="font-family:'DM Serif Display',serif;font-size:28px;color:var(--accent);margin-bottom:4px;">
       Tayla <span style="color:var(--accent2);">Business</span>
     </div>
-    <div style="font-size:13px;color:var(--text3);margin-bottom:32px;">Sign in to continue</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:32px;" id="login-subtitle">Sign in to continue</div>
 
-    <div style="text-align:left;margin-bottom:16px;">
-      <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Password</label>
-      <input
-        type="password"
-        id="login-password"
-        placeholder="Enter password"
-        style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
-        onkeydown="if(event.key==='Enter')attemptLogin()"
-      >
+    <!-- Sign In Panel -->
+    <div id="login-panel">
+      <div style="text-align:left;margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Email</label>
+        <input type="email" id="login-email" placeholder="you@example.com"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
+          onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+      </div>
+      <div style="text-align:left;margin-bottom:20px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Password</label>
+        <input type="password" id="login-password" placeholder="Enter password"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
+          onkeydown="if(event.key==='Enter')attemptLogin()">
+      </div>
+      <div id="login-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;text-align:left;"></div>
+      <button id="login-btn" onclick="attemptLogin()" style="
+        width:100%;padding:13px;background:var(--accent);color:#fff;
+        border:none;border-radius:8px;font-size:14px;font-weight:600;
+        font-family:'DM Sans',sans-serif;cursor:pointer;transition:background .15s;">
+        Sign In
+      </button>
+      <div style="margin-top:16px;text-align:center;">
+        <span style="font-size:13px;color:var(--text3);">Don't have an account? </span>
+        <button onclick="showAuthPanel('signup')" style="background:none;border:none;font-size:13px;color:var(--accent3);font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Create account</button>
+      </div>
+      <div style="margin-top:8px;text-align:center;">
+        <button onclick="showAuthPanel('reset')" style="background:none;border:none;font-size:12px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:underline;">Forgot password?</button>
+      </div>
     </div>
 
-    <div id="login-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;">
-      Incorrect password. Please try again.
+    <!-- Sign Up Panel -->
+    <div id="signup-panel" style="display:none;">
+      <div style="text-align:left;margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Email</label>
+        <input type="email" id="signup-email" placeholder="you@example.com"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);">
+      </div>
+      <div style="text-align:left;margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Password</label>
+        <input type="password" id="signup-password" placeholder="Min. 8 characters"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);">
+      </div>
+      <div style="text-align:left;margin-bottom:20px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Confirm Password</label>
+        <input type="password" id="signup-confirm" placeholder="Repeat password"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
+          onkeydown="if(event.key==='Enter')attemptSignup()">
+      </div>
+      <div id="signup-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;text-align:left;"></div>
+      <button onclick="attemptSignup()" style="
+        width:100%;padding:13px;background:var(--accent);color:#fff;
+        border:none;border-radius:8px;font-size:14px;font-weight:600;
+        font-family:'DM Sans',sans-serif;cursor:pointer;">
+        Create Account
+      </button>
+      <div style="margin-top:14px;text-align:center;">
+        <button onclick="showAuthPanel('login')" style="background:none;border:none;font-size:13px;color:var(--accent3);font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">← Back to sign in</button>
+      </div>
     </div>
 
-    <button onclick="attemptLogin()" style="
-      width:100%;padding:13px;background:var(--accent);color:#fff;
-      border:none;border-radius:8px;font-size:14px;font-weight:600;
-      font-family:'DM Sans',sans-serif;cursor:pointer;
-      transition:background .15s;
-    " onmouseover="this.style.background='#2d2d4e'" onmouseout="this.style.background='var(--accent)'">
-      Sign In
-    </button>
+    <!-- Reset Password Panel -->
+    <div id="reset-panel" style="display:none;">
+      <div style="text-align:left;margin-bottom:20px;">
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:6px;">Email</label>
+        <input type="email" id="reset-email" placeholder="you@example.com"
+          style="width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);"
+          onkeydown="if(event.key==='Enter')attemptReset()">
+      </div>
+      <div id="reset-msg" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:13px;text-align:left;"></div>
+      <button onclick="attemptReset()" style="
+        width:100%;padding:13px;background:var(--accent);color:#fff;
+        border:none;border-radius:8px;font-size:14px;font-weight:600;
+        font-family:'DM Sans',sans-serif;cursor:pointer;">
+        Send Reset Link
+      </button>
+      <div style="margin-top:14px;text-align:center;">
+        <button onclick="showAuthPanel('login')" style="background:none;border:none;font-size:13px;color:var(--accent3);font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">← Back to sign in</button>
+      </div>
+    </div>
+
+  </div><!-- /login card -->
+</div><!-- /login-overlay -->
+
+<!-- ══════════════════ SETUP WIZARD OVERLAY ══════════════════ -->
+<div id="setup-overlay" style="
+  position:fixed;inset:0;z-index:9998;
+  background:var(--accent);
+  display:none;align-items:center;justify-content:center;
+  overflow-y:auto;padding:32px 16px;
+">
+  <div style="
+    background:var(--surface);border-radius:16px;
+    padding:40px;width:620px;max-width:96vw;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);
+  ">
+    <!-- Wizard header -->
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--accent);margin-bottom:4px;">
+        Tayla <span style="color:var(--accent2);">Business</span>
+      </div>
+      <div id="setup-step-label" style="font-size:13px;color:var(--text3);">Let's set up your business</div>
+      <!-- Progress dots -->
+      <div style="display:flex;justify-content:center;gap:8px;margin-top:16px;" id="setup-dots"></div>
+    </div>
+
+    <!-- Step 1: Business Type -->
+    <div id="setup-step-1">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:6px;">What type of business is this?</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:24px;">This shapes your categories, metrics, and dashboard throughout Tayla Business.</div>
+      <div id="biz-type-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;">
+        <!-- Cards injected by JS -->
+      </div>
+      <button onclick="setupNext()" class="btn btn-primary" style="width:100%;padding:13px;font-size:14px;">Continue →</button>
+    </div>
+
+    <!-- Step 2: Business Details -->
+    <div id="setup-step-2" style="display:none;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:6px;">Business details</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:24px;">This appears on your reports and statements.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Business / Trading Name <span style="color:var(--danger);">*</span></label>
+          <input type="text" id="setup-biz-name" placeholder="e.g. Tayla" style="padding:11px 14px;">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>ABN <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">(optional now, required for BAS)</span></label>
+          <input type="text" id="setup-abn" placeholder="e.g. 12 345 678 901" style="padding:11px 14px;" maxlength="14">
+        </div>
+        <div class="form-group">
+          <label>Business Phone</label>
+          <input type="tel" id="setup-phone" placeholder="04xx xxx xxx" style="padding:11px 14px;">
+        </div>
+        <div class="form-group">
+          <label>Business Email</label>
+          <input type="email" id="setup-biz-email" placeholder="hello@yourbusiness.com.au" style="padding:11px 14px;">
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Business Address</label>
+          <input type="text" id="setup-address" placeholder="123 Smith St, Melbourne VIC 3000" style="padding:11px 14px;">
+        </div>
+        <div class="form-group">
+          <label>State</label>
+          <select id="setup-state" style="padding:11px 14px;">
+            <option value="">Select…</option>
+            <option>VIC</option><option>NSW</option><option>QLD</option><option>WA</option>
+            <option>SA</option><option>TAS</option><option>ACT</option><option>NT</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Postcode</label>
+          <input type="text" id="setup-postcode" placeholder="3000" maxlength="4" style="padding:11px 14px;">
+        </div>
+      </div>
+      <div id="setup-step2-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="setupBack()" class="btn btn-ghost" style="color:var(--text);padding:13px 20px;flex-shrink:0;">← Back</button>
+        <button onclick="setupNext()" class="btn btn-primary" style="flex:1;padding:13px;font-size:14px;">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Financial Settings -->
+    <div id="setup-step-3" style="display:none;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:6px;">Financial settings</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:24px;">These defaults apply to your tax, GST and BAS reporting.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+        <div class="form-group">
+          <label>Entity Type</label>
+          <select id="setup-entity" style="padding:11px 14px;">
+            <option value="sole_trader">Sole Trader / Individual</option>
+            <option value="company">Company (Pty Ltd)</option>
+            <option value="partnership">Partnership</option>
+            <option value="trust">Trust</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Financial Year End</label>
+          <select id="setup-fy" style="padding:11px 14px;">
+            <option value="june">30 June (Standard)</option>
+            <option value="dec">31 December</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>GST Registered?</label>
+          <select id="setup-gst" onchange="toggleBASField()" style="padding:11px 14px;">
+            <option value="yes">Yes — registered for GST</option>
+            <option value="no">No — not yet registered</option>
+          </select>
+        </div>
+        <div class="form-group" id="setup-bas-group">
+          <label>BAS Lodgement</label>
+          <select id="setup-bas" style="padding:11px 14px;">
+            <option value="quarterly">Quarterly</option>
+            <option value="monthly">Monthly</option>
+            <option value="annual">Annual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Default Currency</label>
+          <select id="setup-currency" style="padding:11px 14px;">
+            <option value="AUD">AUD — Australian Dollar</option>
+            <option value="USD">USD — US Dollar</option>
+            <option value="NZD">NZD — New Zealand Dollar</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Industry / Sector</label>
+          <input type="text" id="setup-industry" placeholder="e.g. Technology, Hospitality" style="padding:11px 14px;">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="setupBack()" class="btn btn-ghost" style="color:var(--text);padding:13px 20px;flex-shrink:0;">← Back</button>
+        <button onclick="setupNext()" class="btn btn-primary" style="flex:1;padding:13px;font-size:14px;">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 4: Logo (optional) -->
+    <div id="setup-step-4" style="display:none;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:6px;">Add a logo <span style="font-size:14px;color:var(--text3);font-family:'DM Sans',sans-serif;font-weight:400;">(optional)</span></div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:24px;">Appears on your invoices and exported reports.</div>
+      <div id="logo-drop-zone" onclick="document.getElementById('setup-logo-input').click()" style="
+        border:2px dashed var(--border);border-radius:12px;padding:40px;
+        text-align:center;cursor:pointer;transition:border-color .15s;margin-bottom:20px;
+      " onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div id="logo-preview-wrap" style="display:none;margin-bottom:12px;">
+          <img id="logo-preview-img" style="max-height:80px;max-width:200px;border-radius:6px;" />
+        </div>
+        <div id="logo-drop-text">
+          <div style="font-size:32px;margin-bottom:8px;">🖼</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text2);">Click to upload logo</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px;">PNG, JPG or SVG — max 2MB</div>
+        </div>
+        <input type="file" id="setup-logo-input" accept="image/*" style="display:none;" onchange="handleLogoUpload(this)">
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="setupBack()" class="btn btn-ghost" style="color:var(--text);padding:13px 20px;flex-shrink:0;">← Back</button>
+        <button onclick="setupNext()" class="btn btn-primary" style="flex:1;padding:13px;font-size:14px;">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 5: Review & Confirm -->
+    <div id="setup-step-5" style="display:none;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:6px;">All set — let's review</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px;">You can change any of this later from Settings.</div>
+      <div id="setup-review" style="background:var(--surface2);border-radius:10px;padding:18px;font-size:13px;line-height:1.8;margin-bottom:20px;"></div>
+      <div id="setup-save-error" style="display:none;margin-bottom:14px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="setupBack()" class="btn btn-ghost" style="color:var(--text);padding:13px 20px;flex-shrink:0;">← Back</button>
+        <button id="setup-save-btn" onclick="saveSetup()" class="btn btn-accent" style="flex:1;padding:13px;font-size:14px;font-weight:700;">🚀 Launch Tayla Business</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
+<style>
+.biz-type-card {
+  border:2px solid var(--border);border-radius:12px;padding:18px 16px;
+  cursor:pointer;transition:all .15s;text-align:left;background:var(--surface);
+}
+.biz-type-card:hover { border-color:var(--accent); background:var(--surface2); }
+.biz-type-card.selected { border-color:var(--accent);background:rgba(26,26,46,.04);box-shadow:0 0 0 3px rgba(26,26,46,.12); }
+.biz-type-card .bt-icon { font-size:28px;margin-bottom:8px; }
+.biz-type-card .bt-title { font-weight:600;font-size:14px;margin-bottom:3px; }
+.biz-type-card .bt-desc { font-size:12px;color:var(--text3);line-height:1.4; }
+</style>
+
 <script>
-  (function() {
-    const PW = 'FordFalcon1*';
-    if (sessionStorage.getItem('tb_auth') === '1') {
-      document.getElementById('login-overlay').style.display = 'none';
+// ══════════════════════════════════════════════════════
+//  SUPABASE CONFIG
+//  ⚠ Replace these with your actual project values
+//  from: supabase.com → Project Settings → API
+// ══════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://YOUR_PROJECT_REF.supabase.co';
+const SUPABASE_ANON = 'YOUR_ANON_KEY';
+
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ── Auth state
+let _currentUser = null;
+let _businessProfile = null;
+
+// ── Init: check session on load
+document.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (session) {
+    _currentUser = session.user;
+    await afterLogin();
+  } else {
+    showOverlay('login');
+  }
+
+  // Listen for auth changes (e.g. email confirm callback)
+  _supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      _currentUser = session.user;
+      await afterLogin();
+    } else if (event === 'SIGNED_OUT') {
+      _currentUser = null;
+      _businessProfile = null;
+      showOverlay('login');
     }
-    window.attemptLogin = function() {
-      const pw = document.getElementById('login-password').value;
-      if (pw === PW) {
-        sessionStorage.setItem('tb_auth', '1');
-        const overlay = document.getElementById('login-overlay');
-        overlay.style.transition = 'opacity .3s';
-        overlay.style.opacity = '0';
-        setTimeout(() => overlay.style.display = 'none', 300);
-      } else {
-        document.getElementById('login-error').style.display = 'block';
-        document.getElementById('login-password').value = '';
-        document.getElementById('login-password').focus();
-      }
-    };
-  })();
+  });
+});
+
+async function afterLogin() {
+  // Check if business profile exists
+  const { data, error } = await _supabase
+    .from('businesses')
+    .select('*')
+    .eq('user_id', _currentUser.id)
+    .maybeSingle();
+
+  if (data) {
+    _businessProfile = data;
+    applyProfileToApp(data);
+    hideAllOverlays();
+  } else {
+    // New user — show setup wizard
+    showOverlay('setup');
+    initSetupWizard();
+  }
+}
+
+function applyProfileToApp(profile) {
+  // Sync business name into app settings
+  if (profile.biz_name) {
+    appSettings.bizName = profile.biz_name;
+    appSettings.bizModel = profile.biz_type || 'saas';
+    localStorage.setItem('appSettings', JSON.stringify(appSettings));
+    const en = document.getElementById('entity-name');
+    if (en) en.value = profile.biz_name;
+    const bn = document.getElementById('setting-biz-name');
+    if (bn) bn.value = profile.biz_name;
+    const bm = document.getElementById('setting-biz-model');
+    if (bm) { bm.value = profile.biz_type || 'saas'; onBizModelChange(); }
+  }
+  // Show user email in header
+  const userBtn = document.getElementById('header-user-btn');
+  if (userBtn && _currentUser) userBtn.textContent = '👤 ' + (_currentUser.email?.split('@')[0] || 'Account');
+  // Render settings profile card
+  renderSettingsProfilePreview();
+}
+
+function hideAllOverlays() {
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('setup-overlay').style.display = 'none';
+}
+
+function showOverlay(which) {
+  document.getElementById('login-overlay').style.display = which === 'login' ? 'flex' : 'none';
+  document.getElementById('setup-overlay').style.display = which === 'setup' ? 'flex' : 'none';
+}
+
+// ── Show different auth panels
+function showAuthPanel(panel) {
+  document.getElementById('login-panel').style.display  = panel === 'login'  ? 'block' : 'none';
+  document.getElementById('signup-panel').style.display = panel === 'signup' ? 'block' : 'none';
+  document.getElementById('reset-panel').style.display  = panel === 'reset'  ? 'block' : 'none';
+  const subtitles = { login: 'Sign in to continue', signup: 'Create your account', reset: 'Reset your password' };
+  document.getElementById('login-subtitle').textContent = subtitles[panel];
+}
+
+// ── Sign In
+async function attemptLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!email || !pw) { showLoginError('Please enter your email and password.'); return; }
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  const { error } = await _supabase.auth.signInWithPassword({ email, password: pw });
+  btn.textContent = 'Sign In'; btn.disabled = false;
+  if (error) showLoginError(error.message);
+}
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ── Sign Up
+async function attemptSignup() {
+  const email   = document.getElementById('signup-email').value.trim();
+  const pw      = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm').value;
+  const errEl   = document.getElementById('signup-error');
+  errEl.style.display = 'none';
+  if (!email || !pw) { errEl.textContent = 'Please fill in all fields.'; errEl.style.display = 'block'; return; }
+  if (pw.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.style.display = 'block'; return; }
+  if (pw !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+  const { error } = await _supabase.auth.signUp({ email, password: pw });
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  errEl.style.background = '#d4edda'; errEl.style.color = '#155724';
+  errEl.textContent = '✓ Account created! Check your email to confirm, then sign in.';
+  errEl.style.display = 'block';
+}
+
+// ── Reset Password
+async function attemptReset() {
+  const email  = document.getElementById('reset-email').value.trim();
+  const msgEl  = document.getElementById('reset-msg');
+  msgEl.style.display = 'none';
+  if (!email) { msgEl.style.background='#fde2e2';msgEl.style.color='var(--danger)';msgEl.textContent='Enter your email address.';msgEl.style.display='block'; return; }
+  const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) {
+    msgEl.style.background='#fde2e2';msgEl.style.color='var(--danger)';msgEl.textContent=error.message;
+  } else {
+    msgEl.style.background='#d4edda';msgEl.style.color='#155724';
+    msgEl.textContent='✓ Reset link sent — check your inbox.';
+  }
+  msgEl.style.display = 'block';
+}
+
+// ── Sign Out
+async function signOut() {
+  await _supabase.auth.signOut();
+}
+
+// ══════════════════════════════════════════════════════
+//  SETUP WIZARD
+// ══════════════════════════════════════════════════════
+const BIZ_TYPES = [
+  { id: 'saas',     icon: '💻', title: 'SaaS',            desc: 'Subscription software — MRR, tiers, churn' },
+  { id: 'hospitality', icon: '🍽', title: 'Hospitality',  desc: 'Cafés, restaurants, bars — covers, revenue per table' },
+  { id: 'retail',   icon: '🛍', title: 'Retail',           desc: 'Products & e-commerce — inventory, COGS, margin' },
+  { id: 'professional', icon: '💼', title: 'Professional Services', desc: 'Agency, consulting, freelance — hourly or project billing' },
+];
+
+let setupStep = 1;
+let setupData = { bizType: 'saas', logoBase64: null };
+const SETUP_TOTAL = 5;
+
+function initSetupWizard() {
+  setupStep = 1;
+  setupData = { bizType: 'saas', logoBase64: null };
+  renderSetupDots();
+  renderBizTypeCards();
+  showSetupStep(1);
+}
+
+function renderSetupDots() {
+  const el = document.getElementById('setup-dots');
+  el.innerHTML = Array.from({length: SETUP_TOTAL}, (_, i) => `
+    <div style="width:8px;height:8px;border-radius:50%;background:${i < setupStep ? 'var(--accent)' : 'var(--border)' };transition:background .2s;"></div>
+  `).join('');
+}
+
+function renderBizTypeCards() {
+  document.getElementById('biz-type-grid').innerHTML = BIZ_TYPES.map(bt => `
+    <div class="biz-type-card ${setupData.bizType === bt.id ? 'selected' : ''}" onclick="selectBizType('${bt.id}')">
+      <div class="bt-icon">${bt.icon}</div>
+      <div class="bt-title">${bt.title}</div>
+      <div class="bt-desc">${bt.desc}</div>
+    </div>
+  `).join('');
+}
+
+function selectBizType(id) {
+  setupData.bizType = id;
+  renderBizTypeCards();
+}
+
+function showSetupStep(n) {
+  for (let i = 1; i <= SETUP_TOTAL; i++) {
+    const el = document.getElementById(`setup-step-${i}`);
+    if (el) el.style.display = i === n ? 'block' : 'none';
+  }
+  const labels = ['','Choose your business type','Business details','Financial settings','Logo','Review & confirm'];
+  document.getElementById('setup-step-label').textContent = `Step ${n} of ${SETUP_TOTAL} — ${labels[n]}`;
+  renderSetupDots();
+}
+
+function setupNext() {
+  if (setupStep === 2) {
+    const name = document.getElementById('setup-biz-name').value.trim();
+    if (!name) {
+      const errEl = document.getElementById('setup-step2-error');
+      errEl.textContent = 'Business name is required.'; errEl.style.display = 'block';
+      document.getElementById('setup-biz-name').focus(); return;
+    }
+    document.getElementById('setup-step2-error').style.display = 'none';
+  }
+  if (setupStep === 4) {
+    renderSetupReview();
+  }
+  if (setupStep < SETUP_TOTAL) { setupStep++; showSetupStep(setupStep); }
+}
+
+function setupBack() {
+  if (setupStep > 1) { setupStep--; showSetupStep(setupStep); }
+}
+
+function toggleBASField() {
+  const gst = document.getElementById('setup-gst').value;
+  document.getElementById('setup-bas-group').style.opacity = gst === 'yes' ? '1' : '.4';
+  document.getElementById('setup-bas').disabled = gst !== 'yes';
+}
+
+function handleLogoUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Logo must be under 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    setupData.logoBase64 = e.target.result;
+    document.getElementById('logo-preview-img').src = e.target.result;
+    document.getElementById('logo-preview-wrap').style.display = 'block';
+    document.getElementById('logo-drop-text').style.opacity = '.4';
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderSetupReview() {
+  const name     = document.getElementById('setup-biz-name').value.trim();
+  const abn      = document.getElementById('setup-abn').value.trim();
+  const phone    = document.getElementById('setup-phone').value.trim();
+  const bizEmail = document.getElementById('setup-biz-email').value.trim();
+  const address  = document.getElementById('setup-address').value.trim();
+  const state    = document.getElementById('setup-state').value;
+  const postcode = document.getElementById('setup-postcode').value.trim();
+  const entity   = document.getElementById('setup-entity');
+  const fy       = document.getElementById('setup-fy');
+  const gst      = document.getElementById('setup-gst');
+  const bas      = document.getElementById('setup-bas');
+  const currency = document.getElementById('setup-currency');
+  const bizType  = BIZ_TYPES.find(b => b.id === setupData.bizType);
+
+  document.getElementById('setup-review').innerHTML = `
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;">
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Type</span>
+      <span>${bizType?.icon} ${bizType?.title}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Name</span>
+      <span style="font-weight:600;">${name}</span>
+      ${abn ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">ABN</span><span>${abn}</span>` : ''}
+      ${address ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Address</span><span>${address}${state ? ', '+state : ''}${postcode ? ' '+postcode : ''}</span>` : ''}
+      ${phone ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Phone</span><span>${phone}</span>` : ''}
+      ${bizEmail ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Email</span><span>${bizEmail}</span>` : ''}
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Entity</span>
+      <span>${entity?.options[entity.selectedIndex]?.text}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">FY End</span>
+      <span>${fy?.options[fy.selectedIndex]?.text}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">GST</span>
+      <span>${gst?.options[gst.selectedIndex]?.text}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Currency</span>
+      <span>${currency?.value}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Logo</span>
+      <span>${setupData.logoBase64 ? '✓ Uploaded' : 'None (can add later)'}</span>
+    </div>
+  `;
+}
+
+async function saveSetup() {
+  const btn   = document.getElementById('setup-save-btn');
+  const errEl = document.getElementById('setup-save-error');
+  errEl.style.display = 'none';
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  const payload = {
+    user_id:      _currentUser.id,
+    biz_type:     setupData.bizType,
+    biz_name:     document.getElementById('setup-biz-name').value.trim(),
+    trading_name: document.getElementById('setup-biz-name').value.trim(),
+    abn:          document.getElementById('setup-abn').value.trim(),
+    phone:        document.getElementById('setup-phone').value.trim(),
+    biz_email:    document.getElementById('setup-biz-email').value.trim(),
+    address:      document.getElementById('setup-address').value.trim(),
+    state:        document.getElementById('setup-state').value,
+    postcode:     document.getElementById('setup-postcode').value.trim(),
+    entity_type:  document.getElementById('setup-entity').value,
+    fy_end:       document.getElementById('setup-fy').value,
+    gst_registered: document.getElementById('setup-gst').value === 'yes',
+    bas_frequency: document.getElementById('setup-bas').value,
+    currency:     document.getElementById('setup-currency').value,
+    industry:     document.getElementById('setup-industry').value.trim(),
+    logo_base64:  setupData.logoBase64,
+    created_at:   new Date().toISOString(),
+    updated_at:   new Date().toISOString(),
+  };
+
+  const { data, error } = await _supabase.from('businesses').insert(payload).select().single();
+
+  btn.textContent = '🚀 Launch Tayla Business'; btn.disabled = false;
+
+  if (error) {
+    errEl.textContent = 'Error saving: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  _businessProfile = data;
+  applyProfileToApp(data);
+  hideAllOverlays();
+  toast('Welcome to Tayla Business! 🎉');
+}
+
+// ── Open setup wizard from settings
+function openSetupWizard() {
+  if (_businessProfile) {
+    // Pre-fill from existing profile
+    setupData.bizType = _businessProfile.biz_type || 'saas';
+    setupData.logoBase64 = _businessProfile.logo_base64 || null;
+    setTimeout(() => {
+      const fields = {
+        'setup-biz-name': _businessProfile.biz_name,
+        'setup-abn':      _businessProfile.abn,
+        'setup-phone':    _businessProfile.phone,
+        'setup-biz-email':_businessProfile.biz_email,
+        'setup-address':  _businessProfile.address,
+        'setup-state':    _businessProfile.state,
+        'setup-postcode': _businessProfile.postcode,
+        'setup-entity':   _businessProfile.entity_type,
+        'setup-fy':       _businessProfile.fy_end,
+        'setup-gst':      _businessProfile.gst_registered ? 'yes' : 'no',
+        'setup-bas':      _businessProfile.bas_frequency,
+        'setup-currency': _businessProfile.currency,
+        'setup-industry': _businessProfile.industry,
+      };
+      Object.entries(fields).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el && val !== undefined && val !== null) el.value = val;
+      });
+    }, 50);
+  }
+  initSetupWizard();
+  showOverlay('setup');
+  // Override save to update instead of insert
+  document.getElementById('setup-save-btn').onclick = updateSetup;
+}
+
+async function updateSetup() {
+  const btn   = document.getElementById('setup-save-btn');
+  const errEl = document.getElementById('setup-save-error');
+  errEl.style.display = 'none';
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  const payload = {
+    biz_type:     setupData.bizType,
+    biz_name:     document.getElementById('setup-biz-name').value.trim(),
+    trading_name: document.getElementById('setup-biz-name').value.trim(),
+    abn:          document.getElementById('setup-abn').value.trim(),
+    phone:        document.getElementById('setup-phone').value.trim(),
+    biz_email:    document.getElementById('setup-biz-email').value.trim(),
+    address:      document.getElementById('setup-address').value.trim(),
+    state:        document.getElementById('setup-state').value,
+    postcode:     document.getElementById('setup-postcode').value.trim(),
+    entity_type:  document.getElementById('setup-entity').value,
+    fy_end:       document.getElementById('setup-fy').value,
+    gst_registered: document.getElementById('setup-gst').value === 'yes',
+    bas_frequency: document.getElementById('setup-bas').value,
+    currency:     document.getElementById('setup-currency').value,
+    industry:     document.getElementById('setup-industry').value.trim(),
+    logo_base64:  setupData.logoBase64 || _businessProfile?.logo_base64,
+    updated_at:   new Date().toISOString(),
+  };
+
+  const { data, error } = await _supabase
+    .from('businesses')
+    .update(payload)
+    .eq('user_id', _currentUser.id)
+    .select().single();
+
+  btn.textContent = '🚀 Launch Tayla Business'; btn.disabled = false;
+  document.getElementById('setup-save-btn').onclick = saveSetup;
+
+  if (error) {
+    errEl.textContent = 'Error saving: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  _businessProfile = data;
+  applyProfileToApp(data);
+  hideAllOverlays();
+  toast('Business profile updated ✓');
+}
 </script>
 
 <header>
@@ -257,6 +894,18 @@
   <div class="header-actions">
     <button class="btn btn-ghost" onclick="exportExcel()">⬇ Export Excel</button>
     <button class="btn btn-accent" onclick="exportPDF()">⬇ Export PDF</button>
+    <div style="position:relative;" id="user-menu-wrap">
+      <button id="header-user-btn" class="btn btn-ghost" onclick="toggleUserMenu()" style="font-size:12px;">👤 Account</button>
+      <div id="user-dropdown" style="
+        display:none;position:absolute;top:calc(100% + 8px);right:0;
+        background:var(--surface);border:1px solid var(--border);border-radius:10px;
+        box-shadow:0 8px 24px rgba(26,26,46,0.15);min-width:200px;z-index:9999;overflow:hidden;
+      ">
+        <div id="user-email-display" style="padding:12px 16px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border);"></div>
+        <div onclick="openSetupWizard();toggleUserMenu()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">⚙ Business Setup</div>
+        <div onclick="signOut()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--danger);border-top:1px solid var(--border);" onmouseover="this.style.background='#fde2e2'" onmouseout="this.style.background=''">→ Sign Out</div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -809,6 +1458,22 @@
 <!-- ══════════════════ SETTINGS ══════════════════ -->
 <div id="settings-page" class="page">
 
+  <!-- Business Profile -->
+  <div class="card section-gap">
+    <div class="card-header flex-between">
+      <div>
+        <div class="card-title">Business Profile</div>
+        <div class="text-sm">Your business details as set up in the onboarding wizard.</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openSetupWizard()">✏ Edit Profile</button>
+    </div>
+    <div class="card-body">
+      <div id="settings-profile-preview" style="font-size:13px;color:var(--text2);line-height:1.8;">
+        <span style="color:var(--text3);">Complete your business setup to see your profile here.</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Business Model -->
   <div class="card section-gap">
     <div class="card-header">
@@ -821,9 +1486,11 @@
       <div class="form-grid">
         <div class="form-group">
           <label>Model Type</label>
-          <select id="setting-biz-model" onchange="saveSettings()">
-            <option value="saas" selected>SaaS (Software as a Service)</option>
-            <!-- More models will be added here -->
+          <select id="setting-biz-model" onchange="saveSettings();onBizModelChange()">
+            <option value="saas">💻 SaaS (Software as a Service)</option>
+            <option value="hospitality">🍽 Hospitality</option>
+            <option value="retail">🛍 Retail</option>
+            <option value="professional">💼 Professional Services</option>
           </select>
         </div>
         <div class="form-group">
@@ -832,7 +1499,7 @@
         </div>
       </div>
 
-      <!-- SaaS model detail card -->
+      <!-- Business model detail cards -->
       <div id="model-detail-saas" style="margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
           <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">SaaS</div>
@@ -842,28 +1509,68 @@
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;">
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Revenue Type</div>
-            <div style="font-size:13px;font-weight:500;">Monthly Recurring (MRR)</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;">
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Key Metric</div>
-            <div style="font-size:13px;font-weight:500;">MRR → ARR</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;">
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">User Tracking</div>
-            <div style="font-size:13px;font-weight:500;">Free / Plus / Pro tiers</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;">
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">GST</div>
-            <div style="font-size:13px;font-weight:500;">Digital services — 10%</div>
-          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Revenue Type</div><div style="font-size:13px;font-weight:500;">Monthly Recurring (MRR)</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Key Metric</div><div style="font-size:13px;font-weight:500;">MRR → ARR</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">User Tracking</div><div style="font-size:13px;font-weight:500;">Free / Plus / Pro tiers</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">GST</div><div style="font-size:13px;font-weight:500;">Digital services — 10%</div></div>
         </div>
       </div>
 
-      <!-- Placeholder for future models -->
-      <div style="margin-top:16px;padding:14px;border:1.5px dashed var(--border);border-radius:10px;text-align:center;color:var(--text3);font-size:13px;">
-        More business models coming soon — Agency, E-commerce, Freelance & more.
+      <div id="model-detail-hospitality" style="display:none;margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">🍽</div>
+          <div>
+            <div style="font-weight:600;font-size:14px;">Hospitality</div>
+            <div style="font-size:12px;color:var(--text3);">Cafés, restaurants, bars — covers, revenue per service</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Revenue Type</div><div style="font-size:13px;font-weight:500;">Daily / Weekly Takings</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Key Metrics</div><div style="font-size:13px;font-weight:500;">Covers, Rev per Cover</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Expenses</div><div style="font-size:13px;font-weight:500;">COGS, Labour, Rent</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">GST</div><div style="font-size:13px;font-weight:500;">Food & bev rules apply</div></div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(232,197,71,.15);border-radius:8px;font-size:12px;color:var(--text2);">
+          ⚡ Hospitality-specific dashboards (daily takings, covers, labour %) coming soon.
+        </div>
+      </div>
+
+      <div id="model-detail-retail" style="display:none;margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">🛍</div>
+          <div>
+            <div style="font-weight:600;font-size:14px;">Retail</div>
+            <div style="font-size:12px;color:var(--text3);">Products & e-commerce — inventory, COGS, gross margin</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Revenue Type</div><div style="font-size:13px;font-weight:500;">Product Sales</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Key Metric</div><div style="font-size:13px;font-weight:500;">Gross Margin, COGS</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Inventory</div><div style="font-size:13px;font-weight:500;">Tayla Stocktake ready</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">GST</div><div style="font-size:13px;font-weight:500;">Standard 10%</div></div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(232,197,71,.15);border-radius:8px;font-size:12px;color:var(--text2);">
+          ⚡ Retail COGS tracking and Tayla Stocktake integration coming soon.
+        </div>
+      </div>
+
+      <div id="model-detail-professional" style="display:none;margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">💼</div>
+          <div>
+            <div style="font-weight:600;font-size:14px;">Professional Services</div>
+            <div style="font-size:12px;color:var(--text3);">Agency, consulting, freelance — hourly or project billing</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Revenue Type</div><div style="font-size:13px;font-weight:500;">Invoiced / Project</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Key Metric</div><div style="font-size:13px;font-weight:500;">Effective Rate, Utilisation</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Billing</div><div style="font-size:13px;font-weight:500;">Hourly / Fixed / Retainer</div></div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">GST</div><div style="font-size:13px;font-weight:500;">Services — 10%</div></div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:rgba(232,197,71,.15);border-radius:8px;font-size:12px;color:var(--text2);">
+          ⚡ Time tracking and project-based invoicing coming soon.
+        </div>
       </div>
     </div>
   </div>
@@ -3624,13 +4331,56 @@ function loadSettings() {
   set('setting-fy',        s.defaultFY);
   const en = document.getElementById('entity-name');
   if (en && s.bizName) en.value = s.bizName;
+  onBizModelChange();
   renderSoftwareSettings();
+  renderSettingsProfilePreview();
 }
 
 function syncEntityName() {
   const name = document.getElementById('setting-biz-name')?.value || '';
   const en = document.getElementById('entity-name');
   if (en) { en.value = name; renderIncomeStatement(); renderBalanceSheet(); }
+}
+
+function onBizModelChange() {
+  const model = document.getElementById('setting-biz-model')?.value || 'saas';
+  ['saas','hospitality','retail','professional'].forEach(m => {
+    const el = document.getElementById('model-detail-' + m);
+    if (el) el.style.display = m === model ? 'block' : 'none';
+  });
+}
+
+function toggleUserMenu() {
+  const dd = document.getElementById('user-dropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+  if (dd.style.display === 'block' && _currentUser) {
+    document.getElementById('user-email-display').textContent = _currentUser.email || '';
+  }
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('user-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const dd = document.getElementById('user-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+
+function renderSettingsProfilePreview() {
+  const el = document.getElementById('settings-profile-preview');
+  if (!el || !_businessProfile) return;
+  const p = _businessProfile;
+  const bizType = { saas:'💻 SaaS', hospitality:'🍽 Hospitality', retail:'🛍 Retail', professional:'💼 Professional Services' }[p.biz_type] || p.biz_type;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 16px;">
+      <span style="color:var(--text3);font-size:12px;">Type</span><span>${bizType}</span>
+      <span style="color:var(--text3);font-size:12px;">Name</span><span style="font-weight:600;">${p.biz_name || '—'}</span>
+      ${p.abn ? `<span style="color:var(--text3);font-size:12px;">ABN</span><span>${p.abn}</span>` : ''}
+      ${p.address ? `<span style="color:var(--text3);font-size:12px;">Address</span><span>${p.address}${p.state ? ', '+p.state : ''}${p.postcode ? ' '+p.postcode : ''}</span>` : ''}
+      <span style="color:var(--text3);font-size:12px;">Entity</span><span>${({sole_trader:'Sole Trader',company:'Company (Pty Ltd)',partnership:'Partnership',trust:'Trust'})[p.entity_type] || p.entity_type}</span>
+      <span style="color:var(--text3);font-size:12px;">GST</span><span>${p.gst_registered ? '✓ Registered' : 'Not registered'}</span>
+      ${p.gst_registered && p.bas_frequency ? `<span style="color:var(--text3);font-size:12px;">BAS</span><span>${p.bas_frequency.charAt(0).toUpperCase()+p.bas_frequency.slice(1)}</span>` : ''}
+    </div>
+  `;
 }
 
 function applyTaxDefaults() {
