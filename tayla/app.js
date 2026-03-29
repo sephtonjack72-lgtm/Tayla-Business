@@ -95,6 +95,8 @@ function applyProfileToApp(profile) {
       if (typeof dbLoadBankAccounts === 'function') {
         dbLoadBankAccounts().then(() => renderBankAccountsList());
       }
+      if (typeof dbLoadContacts === 'function') dbLoadContacts();
+      if (typeof dbLoadInvoices === 'function') dbLoadInvoices();
       renderAll();
     });
   });
@@ -693,6 +695,12 @@ function showPage(id) {
     document.getElementById('reports-tab').classList.add('active');
   } else {
     event.currentTarget.classList.add('active');
+  }
+  if (id === 'reconcile-page' && typeof showReconTab === 'function') {
+    showReconTab('accounts');
+  }
+  if (id === 'invoices-page' && typeof showInvTab === 'function') {
+    showInvTab('list');
   }
   renderAll();
 }
