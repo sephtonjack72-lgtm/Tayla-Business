@@ -1935,9 +1935,7 @@ function autoCategory(desc, type) {
 
 let transactions = JSON.parse(localStorage.getItem('txns') || '[]');
 let journals = JSON.parse(localStorage.getItem('journals') || '[]');
-let assets = JSON.parse(localStorage.getItem('assets') || JSON.stringify([
-  { id: 'a1', name: 'Domain', value: 33.90, type: 'ppe' }
-]));
+let assets = JSON.parse(localStorage.getItem('assets') || '[]');
 let liabilities = JSON.parse(localStorage.getItem('liabilities') || JSON.stringify([]));
 const MONTHS = [
   { key: 'JUL', label: 'Jul 2025', fy: 'Q1' },
@@ -1971,17 +1969,7 @@ let softwareList = JSON.parse(localStorage.getItem('softwareList') || JSON.strin
 // Legacy shim — keep save() compatible
 let monthlyUsers = {};
 
-// Seed initial data from the spreadsheet if empty
-if (transactions.length === 0) {
-  transactions = [
-    { id: uid(), date: '2026-03-01', ref: 'TX-001', desc: 'Meta Advertising', type: 'expense', category: 'Marketing & Advertising', amount: 40.62, gst: 'no', method: 'Card' },
-    { id: uid(), date: '2026-03-01', ref: 'TX-002', desc: 'Domain Purchase', type: 'expense', category: 'Domain Purchase', amount: 33.90, gst: 'no', method: 'Card' },
-    { id: uid(), date: '2026-03-01', ref: 'TX-003', desc: 'Business Name Registration', type: 'expense', category: 'Business Name Registration', amount: 45.00, gst: 'no', method: 'Card' },
-    { id: uid(), date: '2026-03-01', ref: 'TX-004', desc: 'Capital Injection', type: 'capital', category: 'Capital Injection', amount: 140.62, gst: 'no', method: 'Bank' },
-    { id: uid(), date: '2026-03-01', ref: 'TX-005', desc: 'Owner Drawings', type: 'drawings', category: 'Owner Drawings', amount: 16.35, gst: 'no', method: 'Bank' },
-  ];
-  save();
-}
+
 
 let editId = null;
 let selectedLedgerAccount = null;
