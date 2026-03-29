@@ -1,0 +1,3234 @@
+/* ══════════════════════════════════════════════════════
+   Tayla Business — Application Logic
+   app.js
+══════════════════════════════════════════════════════ */
+
+// ══════════════════════════════════════════════════════
+//  SUPABASE CONFIG
+//  ⚠ Replace these with your actual project values
+//  from: supabase.com → Project Settings → API
+// ══════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://vyikolylJzygmxiahcul.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aWtvbHlsanp5Z214aWFoY3VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NzMyNDQsImV4cCI6MjA5MDM0OTI0NH0.v75aCYpDGlUgnaNFj3JE_clvVxmt2YAA_I9AYFABZII';
+
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ── Auth state
+let _currentUser = null;
+let _businessProfile = null;
+
+// ── Init: check session on load
+document.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await _supabase.auth.getSession();
+  if (session) {
+    _currentUser = session.user;
+    await afterLogin();
+  } else {
+    showOverlay('login');
+  }
+
+  // Listen for auth changes (e.g. email confirm callback)
+  _supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      _currentUser = session.user;
+      await afterLogin();
+    } else if (event === 'SIGNED_OUT') {
+      _currentUser = null;
+      _businessProfile = null;
+      showOverlay('login');
+    }
+  });
+});
+
+async function afterLogin() {
+  // Check if business profile exists
+  const { data, error } = await _supabase
+    .from('businesses')
+    .select('*')
+    .eq('user_id', _currentUser.id)
+    .maybeSingle();
+
+  if (data) {
+    _businessProfile = data;
+    applyProfileToApp(data);
+    hideAllOverlays();
+  } else {
+    // New user — show setup wizard
+    showOverlay('setup');
+    initSetupWizard();
+  }
+}
+
+function applyProfileToApp(profile) {
+  // Sync business name into app settings
+  if (profile.biz_name) {
+    appSettings.bizName = profile.biz_name;
+    appSettings.bizModel = profile.biz_type || 'saas';
+    localStorage.setItem('appSettings', JSON.stringify(appSettings));
+    const en = document.getElementById('entity-name');
+    if (en) en.value = profile.biz_name;
+    const bn = document.getElementById('setting-biz-name');
+    if (bn) bn.value = profile.biz_name;
+    const bm = document.getElementById('setting-biz-model');
+    if (bm) { bm.value = profile.biz_type || 'saas'; onBizModelChange(); }
+  }
+  // Show user email in header
+  const userBtn = document.getElementById('header-user-btn');
+  if (userBtn && _currentUser) userBtn.textContent = '👤 ' + (_currentUser.email?.split('@')[0] || 'Account');
+  // Render settings profile card
+  renderSettingsProfilePreview();
+}
+
+function hideAllOverlays() {
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('setup-overlay').style.display = 'none';
+}
+
+function showOverlay(which) {
+  document.getElementById('login-overlay').style.display = which === 'login' ? 'flex' : 'none';
+  document.getElementById('setup-overlay').style.display = which === 'setup' ? 'flex' : 'none';
+}
+
+// ── Show different auth panels
+function showAuthPanel(panel) {
+  document.getElementById('login-panel').style.display  = panel === 'login'  ? 'block' : 'none';
+  document.getElementById('signup-panel').style.display = panel === 'signup' ? 'block' : 'none';
+  document.getElementById('reset-panel').style.display  = panel === 'reset'  ? 'block' : 'none';
+  const subtitles = { login: 'Sign in to continue', signup: 'Create your account', reset: 'Reset your password' };
+  document.getElementById('login-subtitle').textContent = subtitles[panel];
+}
+
+// ── Sign In
+async function attemptLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!email || !pw) { showLoginError('Please enter your email and password.'); return; }
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  const { error } = await _supabase.auth.signInWithPassword({ email, password: pw });
+  btn.textContent = 'Sign In'; btn.disabled = false;
+  if (error) showLoginError(error.message);
+}
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ── Sign Up
+async function attemptSignup() {
+  const email   = document.getElementById('signup-email').value.trim();
+  const pw      = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm').value;
+  const errEl   = document.getElementById('signup-error');
+  errEl.style.display = 'none';
+  if (!email || !pw) { errEl.textContent = 'Please fill in all fields.'; errEl.style.display = 'block'; return; }
+  if (pw.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.style.display = 'block'; return; }
+  if (pw !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+  const { error } = await _supabase.auth.signUp({ email, password: pw });
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  errEl.style.background = '#d4edda'; errEl.style.color = '#155724';
+  errEl.textContent = '✓ Account created! Check your email to confirm, then sign in.';
+  errEl.style.display = 'block';
+}
+
+// ── Reset Password
+async function attemptReset() {
+  const email  = document.getElementById('reset-email').value.trim();
+  const msgEl  = document.getElementById('reset-msg');
+  msgEl.style.display = 'none';
+  if (!email) { msgEl.style.background='#fde2e2';msgEl.style.color='var(--danger)';msgEl.textContent='Enter your email address.';msgEl.style.display='block'; return; }
+  const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) {
+    msgEl.style.background='#fde2e2';msgEl.style.color='var(--danger)';msgEl.textContent=error.message;
+  } else {
+    msgEl.style.background='#d4edda';msgEl.style.color='#155724';
+    msgEl.textContent='✓ Reset link sent — check your inbox.';
+  }
+  msgEl.style.display = 'block';
+}
+
+// ── Sign Out
+async function signOut() {
+  await _supabase.auth.signOut();
+}
+
+// ══════════════════════════════════════════════════════
+//  SETUP WIZARD
+// ══════════════════════════════════════════════════════
+const BIZ_TYPES = [
+  { id: 'saas',     icon: '💻', title: 'SaaS',            desc: 'Subscription software — MRR, tiers, churn' },
+  { id: 'hospitality', icon: '🍽', title: 'Hospitality',  desc: 'Cafés, restaurants, bars — covers, revenue per table' },
+  { id: 'retail',   icon: '🛍', title: 'Retail',           desc: 'Products & e-commerce — inventory, COGS, margin' },
+  { id: 'professional', icon: '💼', title: 'Professional Services', desc: 'Agency, consulting, freelance — hourly or project billing' },
+];
+
+let setupStep = 1;
+let setupData = { bizType: 'saas', logoBase64: null };
+const SETUP_TOTAL = 5;
+
+function initSetupWizard() {
+  setupStep = 1;
+  setupData = { bizType: 'saas', logoBase64: null };
+  renderSetupDots();
+  renderBizTypeCards();
+  showSetupStep(1);
+}
+
+function renderSetupDots() {
+  const el = document.getElementById('setup-dots');
+  el.innerHTML = Array.from({length: SETUP_TOTAL}, (_, i) => `
+    <div style="width:8px;height:8px;border-radius:50%;background:${i < setupStep ? 'var(--accent)' : 'var(--border)' };transition:background .2s;"></div>
+  `).join('');
+}
+
+function renderBizTypeCards() {
+  document.getElementById('biz-type-grid').innerHTML = BIZ_TYPES.map(bt => `
+    <div class="biz-type-card ${setupData.bizType === bt.id ? 'selected' : ''}" onclick="selectBizType('${bt.id}')">
+      <div class="bt-icon">${bt.icon}</div>
+      <div class="bt-title">${bt.title}</div>
+      <div class="bt-desc">${bt.desc}</div>
+    </div>
+  `).join('');
+}
+
+function selectBizType(id) {
+  setupData.bizType = id;
+  renderBizTypeCards();
+}
+
+function showSetupStep(n) {
+  for (let i = 1; i <= SETUP_TOTAL; i++) {
+    const el = document.getElementById(`setup-step-${i}`);
+    if (el) el.style.display = i === n ? 'block' : 'none';
+  }
+  const labels = ['','Choose your business type','Business details','Financial settings','Logo','Review & confirm'];
+  document.getElementById('setup-step-label').textContent = `Step ${n} of ${SETUP_TOTAL} — ${labels[n]}`;
+  renderSetupDots();
+}
+
+function setupNext() {
+  if (setupStep === 2) {
+    const name = document.getElementById('setup-biz-name').value.trim();
+    if (!name) {
+      const errEl = document.getElementById('setup-step2-error');
+      errEl.textContent = 'Business name is required.'; errEl.style.display = 'block';
+      document.getElementById('setup-biz-name').focus(); return;
+    }
+    document.getElementById('setup-step2-error').style.display = 'none';
+  }
+  if (setupStep === 4) {
+    renderSetupReview();
+  }
+  if (setupStep < SETUP_TOTAL) { setupStep++; showSetupStep(setupStep); }
+}
+
+function setupBack() {
+  if (setupStep > 1) { setupStep--; showSetupStep(setupStep); }
+}
+
+function toggleBASField() {
+  const gst = document.getElementById('setup-gst').value;
+  document.getElementById('setup-bas-group').style.opacity = gst === 'yes' ? '1' : '.4';
+  document.getElementById('setup-bas').disabled = gst !== 'yes';
+}
+
+function handleLogoUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Logo must be under 2MB'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    setupData.logoBase64 = e.target.result;
+    document.getElementById('logo-preview-img').src = e.target.result;
+    document.getElementById('logo-preview-wrap').style.display = 'block';
+    document.getElementById('logo-drop-text').style.opacity = '.4';
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderSetupReview() {
+  const name     = document.getElementById('setup-biz-name').value.trim();
+  const abn      = document.getElementById('setup-abn').value.trim();
+  const phone    = document.getElementById('setup-phone').value.trim();
+  const bizEmail = document.getElementById('setup-biz-email').value.trim();
+  const address  = document.getElementById('setup-address').value.trim();
+  const state    = document.getElementById('setup-state').value;
+  const postcode = document.getElementById('setup-postcode').value.trim();
+  const entity   = document.getElementById('setup-entity');
+  const fy       = document.getElementById('setup-fy');
+  const gst      = document.getElementById('setup-gst');
+  const bas      = document.getElementById('setup-bas');
+  const currency = document.getElementById('setup-currency');
+  const bizType  = BIZ_TYPES.find(b => b.id === setupData.bizType);
+
+  document.getElementById('setup-review').innerHTML = `
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;">
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Type</span>
+      <span>${bizType?.icon} ${bizType?.title}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Name</span>
+      <span style="font-weight:600;">${name}</span>
+      ${abn ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">ABN</span><span>${abn}</span>` : ''}
+      ${address ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Address</span><span>${address}${state ? ', '+state : ''}${postcode ? ' '+postcode : ''}</span>` : ''}
+      ${phone ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Phone</span><span>${phone}</span>` : ''}
+      ${bizEmail ? `<span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Email</span><span>${bizEmail}</span>` : ''}
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Entity</span>
+      <span>${entity?.options[entity.selectedIndex]?.text}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">FY End</span>
+      <span>${fy?.options[fy.selectedIndex]?.text}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">GST</span>
+      <span>${gst?.options[gst.selectedIndex]?.text}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Currency</span>
+      <span>${currency?.value}</span>
+      <span style="color:var(--text3);font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Logo</span>
+      <span>${setupData.logoBase64 ? '✓ Uploaded' : 'None (can add later)'}</span>
+    </div>
+  `;
+}
+
+async function saveSetup() {
+  const btn   = document.getElementById('setup-save-btn');
+  const errEl = document.getElementById('setup-save-error');
+  errEl.style.display = 'none';
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  const payload = {
+    user_id:      _currentUser.id,
+    biz_type:     setupData.bizType,
+    biz_name:     document.getElementById('setup-biz-name').value.trim(),
+    trading_name: document.getElementById('setup-biz-name').value.trim(),
+    abn:          document.getElementById('setup-abn').value.trim(),
+    phone:        document.getElementById('setup-phone').value.trim(),
+    biz_email:    document.getElementById('setup-biz-email').value.trim(),
+    address:      document.getElementById('setup-address').value.trim(),
+    state:        document.getElementById('setup-state').value,
+    postcode:     document.getElementById('setup-postcode').value.trim(),
+    entity_type:  document.getElementById('setup-entity').value,
+    fy_end:       document.getElementById('setup-fy').value,
+    gst_registered: document.getElementById('setup-gst').value === 'yes',
+    bas_frequency: document.getElementById('setup-bas').value,
+    currency:     document.getElementById('setup-currency').value,
+    industry:     document.getElementById('setup-industry').value.trim(),
+    logo_base64:  setupData.logoBase64,
+    created_at:   new Date().toISOString(),
+    updated_at:   new Date().toISOString(),
+  };
+
+  const { data, error } = await _supabase.from('businesses').insert(payload).select().single();
+
+  btn.textContent = '🚀 Launch Tayla Business'; btn.disabled = false;
+
+  if (error) {
+    errEl.textContent = 'Error saving: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  _businessProfile = data;
+  applyProfileToApp(data);
+  hideAllOverlays();
+  toast('Welcome to Tayla Business! 🎉');
+}
+
+// ── Open setup wizard from settings
+function openSetupWizard() {
+  if (_businessProfile) {
+    // Pre-fill from existing profile
+    setupData.bizType = _businessProfile.biz_type || 'saas';
+    setupData.logoBase64 = _businessProfile.logo_base64 || null;
+    setTimeout(() => {
+      const fields = {
+        'setup-biz-name': _businessProfile.biz_name,
+        'setup-abn':      _businessProfile.abn,
+        'setup-phone':    _businessProfile.phone,
+        'setup-biz-email':_businessProfile.biz_email,
+        'setup-address':  _businessProfile.address,
+        'setup-state':    _businessProfile.state,
+        'setup-postcode': _businessProfile.postcode,
+        'setup-entity':   _businessProfile.entity_type,
+        'setup-fy':       _businessProfile.fy_end,
+        'setup-gst':      _businessProfile.gst_registered ? 'yes' : 'no',
+        'setup-bas':      _businessProfile.bas_frequency,
+        'setup-currency': _businessProfile.currency,
+        'setup-industry': _businessProfile.industry,
+      };
+      Object.entries(fields).forEach(([id, val]) => {
+        const el = document.getElementById(id);
+        if (el && val !== undefined && val !== null) el.value = val;
+      });
+    }, 50);
+  }
+  initSetupWizard();
+  showOverlay('setup');
+  // Override save to update instead of insert
+  document.getElementById('setup-save-btn').onclick = updateSetup;
+}
+
+async function updateSetup() {
+  const btn   = document.getElementById('setup-save-btn');
+  const errEl = document.getElementById('setup-save-error');
+  errEl.style.display = 'none';
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  const payload = {
+    biz_type:     setupData.bizType,
+    biz_name:     document.getElementById('setup-biz-name').value.trim(),
+    trading_name: document.getElementById('setup-biz-name').value.trim(),
+    abn:          document.getElementById('setup-abn').value.trim(),
+    phone:        document.getElementById('setup-phone').value.trim(),
+    biz_email:    document.getElementById('setup-biz-email').value.trim(),
+    address:      document.getElementById('setup-address').value.trim(),
+    state:        document.getElementById('setup-state').value,
+    postcode:     document.getElementById('setup-postcode').value.trim(),
+    entity_type:  document.getElementById('setup-entity').value,
+    fy_end:       document.getElementById('setup-fy').value,
+    gst_registered: document.getElementById('setup-gst').value === 'yes',
+    bas_frequency: document.getElementById('setup-bas').value,
+    currency:     document.getElementById('setup-currency').value,
+    industry:     document.getElementById('setup-industry').value.trim(),
+    logo_base64:  setupData.logoBase64 || _businessProfile?.logo_base64,
+    updated_at:   new Date().toISOString(),
+  };
+
+  const { data, error } = await _supabase
+    .from('businesses')
+    .update(payload)
+    .eq('user_id', _currentUser.id)
+    .select().single();
+
+  btn.textContent = '🚀 Launch Tayla Business'; btn.disabled = false;
+  document.getElementById('setup-save-btn').onclick = saveSetup;
+
+  if (error) {
+    errEl.textContent = 'Error saving: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  _businessProfile = data;
+  applyProfileToApp(data);
+  hideAllOverlays();
+  toast('Business profile updated ✓');
+}
+
+function toggleReportsMenu(e) {
+    e.stopPropagation();
+    document.getElementById('reports-menu').classList.toggle('open');
+  }
+  function closeReportsMenu() {
+    document.getElementById('reports-menu').classList.remove('open');
+  }
+  document.addEventListener('click', function(e) {
+    if (!document.getElementById('reports-tab').contains(e.target)) {
+      closeReportsMenu();
+    }
+  });
+
+// ══════════════════════════════════════════════════════
+//  CHART OF ACCOUNTS (Australian Standard Structure)
+// ══════════════════════════════════════════════════════
+const CHART_OF_ACCOUNTS = {
+  assets: {
+    code: '1',
+    accounts: [
+      { id: '1010', name: 'Cash at Bank', type: 'asset', gst: false },
+      { id: '1020', name: 'Accounts Receivable', type: 'asset', gst: false },
+      { id: '1030', name: 'GST Receivable', type: 'asset', gst: false },
+      { id: '1100', name: 'Inventory', type: 'asset', gst: false },
+      { id: '1500', name: 'Plant & Equipment', type: 'asset', gst: false },
+      { id: '1510', name: 'Accumulated Depreciation - PPE', type: 'asset', gst: false, contra: true },
+      { id: '1600', name: 'Intangible Assets', type: 'asset', gst: false },
+    ]
+  },
+  liabilities: {
+    code: '2',
+    accounts: [
+      { id: '2010', name: 'Accounts Payable', type: 'liability', gst: false },
+      { id: '2020', name: 'GST Payable', type: 'liability', gst: false },
+      { id: '2030', name: 'PAYG Withholding Payable', type: 'liability', gst: false },
+      { id: '2040', name: 'Superannuation Payable', type: 'liability', gst: false },
+      { id: '2100', name: 'Loans Payable', type: 'liability', gst: false },
+      { id: '2200', name: 'Provision for Annual Leave', type: 'liability', gst: false },
+    ]
+  },
+  equity: {
+    code: '3',
+    accounts: [
+      { id: '3010', name: 'Capital', type: 'equity', gst: false },
+      { id: '3020', name: 'Drawings', type: 'equity', gst: false, contra: true },
+      { id: '3030', name: 'Retained Earnings', type: 'equity', gst: false },
+      { id: '3040', name: 'Current Year Earnings', type: 'equity', gst: false },
+    ]
+  },
+  revenue: {
+    code: '4',
+    accounts: [
+      { id: '4010', name: 'Sales Revenue', type: 'revenue', gst: true },
+      { id: '4020', name: 'Subscription Revenue', type: 'revenue', gst: true },
+      { id: '4030', name: 'Consulting Fees', type: 'revenue', gst: true },
+      { id: '4040', name: 'Other Revenue', type: 'revenue', gst: true },
+    ]
+  },
+  expenses: {
+    code: '5',
+    accounts: [
+      { id: '5010', name: 'Marketing & Advertising', type: 'expense', gst: true },
+      { id: '5020', name: 'Software Subscriptions', type: 'expense', gst: true },
+      { id: '5030', name: 'Hosting & Infrastructure', type: 'expense', gst: true },
+      { id: '5040', name: 'Salaries & Wages', type: 'expense', gst: false },
+      { id: '5050', name: 'Rent', type: 'expense', gst: true },
+      { id: '5060', name: 'Depreciation Expense', type: 'expense', gst: false },
+      { id: '5070', name: 'Bank Charges', type: 'expense', gst: true },
+      { id: '5080', name: 'Business Setup Costs', type: 'expense', gst: true },
+      { id: '5090', name: 'Domain & Registration', type: 'expense', gst: true },
+      { id: '5100', name: 'Motor Vehicle Expenses', type: 'expense', gst: true },
+      { id: '5110', name: 'Professional Fees', type: 'expense', gst: true },
+    ]
+  }
+};
+
+// Flatten for easy lookup
+const ALL_ACCOUNTS = Object.values(CHART_OF_ACCOUNTS).flatMap(g => g.accounts);
+function getAccount(id) { return ALL_ACCOUNTS.find(a => a.id === id); }
+function getAccountsByType(type) { return ALL_ACCOUNTS.filter(a => a.type === type); }
+
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
+const BASE_CATEGORIES = {
+  income: ['Subscriptions – Plus', 'Subscriptions – Pro', 'Other Income'],
+  expense: ['Marketing & Advertising', 'Software Subscriptions', 'Hosting & Infrastructure', 'Business Setup', 'Domain Purchase', 'Business Name Registration'],
+  drawings: ['Owner Drawings'],
+  capital: ['Capital Injection']
+};
+let activeSoftware = 'combined';
+let customCategories = JSON.parse(localStorage.getItem('customCats') || JSON.stringify({ income: [], expense: [], drawings: [], capital: [] }));
+
+function allCats(type) {
+  return [...(BASE_CATEGORIES[type] || []), ...(customCategories[type] || [])];
+}
+
+function addCustomCategory(type, name) {
+  if (!name || allCats(type).includes(name)) return;
+  customCategories[type].push(name);
+  localStorage.setItem('customCats', JSON.stringify(customCategories));
+}
+
+const CAT_BADGE = {
+  'Subscriptions – Plus': 'badge-income',
+  'Subscriptions – Pro': 'badge-income',
+  'Other Income': 'badge-income',
+  'Marketing & Advertising': 'badge-operating',
+  'Software Subscriptions': 'badge-software',
+  'Hosting & Infrastructure': 'badge-hosting',
+  'Business Setup': 'badge-setup',
+  'Domain Purchase': 'badge-setup',
+  'Business Name Registration': 'badge-setup',
+  'Other Expense': 'badge-operating',
+  'Owner Drawings': 'badge-drawings',
+  'Capital Injection': 'badge-income',
+};
+
+// Auto-categorisation keywords
+const AUTO_CAT = [
+  ['meta|facebook|instagram|tiktok|google ads|advertising|marketing', 'Marketing & Advertising'],
+  ['github', 'Software Subscriptions'],
+  ['supabase|cloudflare|vercel|aws|hosting|server|infra', 'Hosting & Infrastructure'],
+  ['domain|namecheap|godaddy', 'Domain Purchase'],
+  ['asic|business name|registration', 'Business Name Registration'],
+  ['plus.*sub|sub.*plus', 'Subscriptions – Plus'],
+  ['pro.*sub|sub.*pro', 'Subscriptions – Pro'],
+  ['subscription|saas', 'Software Subscriptions'],
+  ['drawing|personal|withdraw', 'Owner Drawings'],
+  ['capital|inject|invest', 'Capital Injection'],
+];
+
+function autoCategory(desc, type) {
+  const d = desc.toLowerCase();
+  for (const [pattern, cat] of AUTO_CAT) {
+    if (new RegExp(pattern).test(d)) return cat;
+  }
+  return allCats(type)[0];
+}
+
+let transactions = JSON.parse(localStorage.getItem('txns') || '[]');
+let journals = JSON.parse(localStorage.getItem('journals') || '[]');
+let assets = JSON.parse(localStorage.getItem('assets') || '[]');
+let liabilities = JSON.parse(localStorage.getItem('liabilities') || JSON.stringify([]));
+const MONTHS = [
+  { key: 'JUL', label: 'Jul 2025', fy: 'Q1' },
+  { key: 'AUG', label: 'Aug 2025', fy: 'Q1' },
+  { key: 'SEP', label: 'Sep 2025', fy: 'Q1' },
+  { key: 'OCT', label: 'Oct 2025', fy: 'Q2' },
+  { key: 'NOV', label: 'Nov 2025', fy: 'Q2' },
+  { key: 'DEC', label: 'Dec 2025', fy: 'Q2' },
+  { key: 'JAN', label: 'Jan 2026', fy: 'Q3' },
+  { key: 'FEB', label: 'Feb 2026', fy: 'Q3' },
+  { key: 'MAR', label: 'Mar 2026', fy: 'Q3' },
+  { key: 'APR', label: 'Apr 2026', fy: 'Q4' },
+  { key: 'MAY', label: 'May 2026', fy: 'Q4' },
+  { key: 'JUN', label: 'Jun 2026', fy: 'Q4' },
+];
+// Software portfolio — each item: {id, name, tiers:[{id,name,price}], monthlyUsers:{MON:{tid:count,free:n,staff:n}}}
+let softwareList = JSON.parse(localStorage.getItem('softwareList') || JSON.stringify([
+  {
+    id: 'sw1',
+    name: 'Tayla',
+    tiers: [
+      { id: 't1', name: 'Plus', price: 3.99 },
+      { id: 't2', name: 'Pro',  price: 12.99 }
+    ],
+    monthlyUsers: Object.fromEntries(MONTHS.map(m => [m.key,
+      (m.key==='JAN'||m.key==='FEB'||m.key==='MAR') ? { free:2, t1:0, t2:0, staff:1 } : { free:0, t1:0, t2:0, staff:0 }
+    ]))
+  }
+]));
+
+// Legacy shim — keep save() compatible
+let monthlyUsers = {};
+
+
+
+let editId = null;
+let selectedLedgerAccount = null;
+let txDebitLines = 1;
+let txCreditLines = 1;
+
+function uid() { return Math.random().toString(36).slice(2, 10); }
+function save() {
+  localStorage.setItem('txns', JSON.stringify(transactions));
+  localStorage.setItem('journals', JSON.stringify(journals));
+  localStorage.setItem('assets', JSON.stringify(assets));
+  localStorage.setItem('liabilities', JSON.stringify(liabilities));
+  localStorage.setItem('softwareList', JSON.stringify(softwareList));
+}
+
+// ══════════════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const reportPages = ['income-stmt','balance-sheet','gst','users-page','tax-page'];
+  if (reportPages.includes(id)) {
+    document.getElementById('reports-tab').classList.add('active');
+  } else {
+    event.currentTarget.classList.add('active');
+  }
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════
+//  CATEGORY OPTIONS
+// ══════════════════════════════════════════════════════
+function updateCategoryOptions() {
+  const type = document.getElementById('tx-type').value;
+  const sel = document.getElementById('tx-category');
+  buildCatOptions(sel, type);
+}
+function updateEditCats() {
+  const type = document.getElementById('edit-type').value;
+  const sel = document.getElementById('edit-category');
+  buildCatOptions(sel, type);
+}
+function buildCatOptions(sel, type, selected) {
+  const cats = allCats(type);
+  sel.innerHTML = cats.map(c => `<option value="${c}" ${selected===c?'selected':''}>${c}</option>`).join('');
+  sel.innerHTML += `<option value="__new__" style="color:var(--accent);font-weight:600;">＋ Add new category…</option>`;
+}
+function handleCategoryChange(selId, typeId) {
+  const sel = document.getElementById(selId);
+  const type = document.getElementById(typeId).value;
+  if (sel.value !== '__new__') return;
+  // revert immediately so select doesn't sit on __new__
+  buildCatOptions(sel, type);
+  openNewCatModal(type, selId, typeId);
+}
+
+function openNewCatModal(type, selId, typeId) {
+  document.getElementById('newcat-type-label').textContent = type;
+  document.getElementById('newcat-input').value = '';
+  document.getElementById('newcat-modal').classList.add('show');
+  document.getElementById('newcat-input').focus();
+  document.getElementById('newcat-modal').dataset.selId = selId;
+  document.getElementById('newcat-modal').dataset.typeId = typeId;
+  document.getElementById('newcat-modal').dataset.catType = type;
+}
+
+function saveNewCategory() {
+  const modal = document.getElementById('newcat-modal');
+  const name = document.getElementById('newcat-input').value.trim();
+  const type = modal.dataset.catType;
+  const selId = modal.dataset.selId;
+  if (!name) { document.getElementById('newcat-input').focus(); return; }
+  addCustomCategory(type, name);
+  const sel = document.getElementById(selId);
+  buildCatOptions(sel, type, name);
+  sel.value = name;
+  closeNewCatModal();
+  toast('Category "' + name + '" added ✓');
+}
+
+function closeNewCatModal() {
+  document.getElementById('newcat-modal').classList.remove('show');
+}
+
+// ══════════════════════════════════════════════════════
+//  DOUBLE ENTRY TRANSACTION FUNCTIONS
+// ══════════════════════════════════════════════════════
+function buildAccountOptions() {
+  let html = '<option value="">Select Account...</option>';
+  Object.entries(CHART_OF_ACCOUNTS).forEach(([group, data]) => {
+    html += `<optgroup label="${group.toUpperCase()}">`;
+    data.accounts.filter(a => !a.contra).forEach(a => {
+      html += `<option value="${a.id}">${a.id} ${a.name}</option>`;
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+
+function initTxLines() {
+  // Populate account dropdowns
+  const opts = buildAccountOptions();
+  document.querySelectorAll('.tx-account').forEach(sel => sel.innerHTML = opts);
+}
+
+function addTxLine(type) {
+  const container = document.getElementById(`tx-${type}-lines`);
+  const count = type === 'debit' ? txDebitLines++ : txCreditLines++;
+  const div = document.createElement('div');
+  div.className = 'tx-line';
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;';
+  div.innerHTML = `
+    <select id="tx-${type}-account-${count}" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+      ${buildAccountOptions()}
+    </select>
+    <input type="number" id="tx-${type}-amount-${count}" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx()">
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();validateTx()" style="padding:4px 8px;">✕</button>
+  `;
+  container.appendChild(div);
+}
+
+function validateTx() {
+  let totalDebits = 0, totalCredits = 0;
+  let debitAccounts = 0, creditAccounts = 0;
+  
+  document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
+    const acc = line.querySelector('select').value;
+    const amt = parseFloat(line.querySelector('input').value) || 0;
+    if (acc && amt > 0) { totalDebits += amt; debitAccounts++; }
+  });
+  
+  document.querySelectorAll('#tx-credit-lines .tx-line').forEach(line => {
+    const acc = line.querySelector('select').value;
+    const amt = parseFloat(line.querySelector('input').value) || 0;
+    if (acc && amt > 0) { totalCredits += amt; creditAccounts++; }
+  });
+  
+  const validationDiv = document.getElementById('tx-validation');
+  const diff = Math.abs(totalDebits - totalCredits);
+  
+  if (debitAccounts === 0 || creditAccounts === 0) {
+    validationDiv.style.display = 'block';
+    validationDiv.style.background = 'var(--surface2)';
+    validationDiv.style.color = 'var(--text2)';
+    validationDiv.innerHTML = '⚠ Need at least 1 debit and 1 credit account';
+    return false;
+  } else if (diff > 0.01) {
+    validationDiv.style.display = 'block';
+    validationDiv.style.background = '#fde2e2';
+    validationDiv.style.color = 'var(--danger)';
+    validationDiv.innerHTML = `❌ Out of balance by ${fmt(diff)}`;
+    return false;
+  } else {
+    validationDiv.style.display = 'block';
+    validationDiv.style.background = '#d4edda';
+    validationDiv.style.color = 'var(--success)';
+    validationDiv.innerHTML = `✓ Balanced — Debits ${fmt(totalDebits)} = Credits ${fmt(totalCredits)}`;
+    return true;
+  }
+}
+
+function onGstToggle() {
+  const on = document.getElementById('tx-gst-toggle').checked;
+  const slider = document.getElementById('tx-gst-slider');
+  const knob = document.getElementById('tx-gst-knob');
+  slider.style.background = on ? 'var(--success)' : 'var(--border)';
+  knob.style.left = on ? '23px' : '3px';
+  updateGstPreview();
+}
+
+function updateGstPreview() {
+  const on = document.getElementById('tx-gst-toggle').checked;
+  const preview = document.getElementById('tx-gst-preview');
+  if (!on) { preview.style.display = 'none'; return; }
+
+  // Collect debit totals
+  let totalDebits = 0;
+  document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    totalDebits += amt;
+  });
+
+  if (totalDebits === 0) { preview.style.display = 'none'; return; }
+
+  const gst = +(totalDebits * .1).toFixed(2);
+  const net = +(totalDebits - gst).toFixed(2);
+
+  preview.style.display = 'block';
+  preview.innerHTML =
+    `✓ GST will be auto-split on save:<br>` +
+    `&nbsp;&nbsp;Gross amount: ${fmt(totalDebits)}<br>` +
+    `&nbsp;&nbsp;GST (10%) → 1030 GST Receivable / 2020 GST Payable: ${fmt(gst)}<br>` +
+    `&nbsp;&nbsp;Net amount posted to account: ${fmt(net)}`;
+}
+
+function addTransactionDoubleEntry() {
+  const gstOn = document.getElementById('tx-gst-toggle').checked;
+
+  const date = document.getElementById('tx-date').value;
+  const ref  = document.getElementById('tx-ref').value.trim();
+  const desc = document.getElementById('tx-desc').value.trim();
+
+  if (!date || !desc) { toast('Please fill in date and description'); return; }
+
+  // Collect raw lines
+  const rawDebits = [], rawCredits = [];
+  document.querySelectorAll('#tx-debit-lines .tx-line').forEach(line => {
+    const acc = line.querySelector('select').value;
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    if (acc && amt > 0) rawDebits.push({ account: acc, amount: amt });
+  });
+  document.querySelectorAll('#tx-credit-lines .tx-line').forEach(line => {
+    const acc = line.querySelector('select').value;
+    const amt = parseFloat(line.querySelector('input[type=number]').value) || 0;
+    if (acc && amt > 0) rawCredits.push({ account: acc, amount: amt });
+  });
+
+  if (rawDebits.length === 0 || rawCredits.length === 0) {
+    toast('Need at least 1 debit and 1 credit line'); return;
+  }
+
+  let debits = [...rawDebits];
+  let credits = [...rawCredits];
+
+  // ── GST AUTO-SPLIT ──
+  // When GST is on, we determine if this looks like an expense or revenue
+  // by checking whether the debit or credit side has a revenue/expense account.
+  // We split the 1/11th GST out of the expense/revenue lines and add the
+  // appropriate GST account (1030 GST Receivable for purchases, 2020 GST Payable for sales).
+  if (gstOn) {
+    const expenseTypes = ['expense'];
+    const revenueTypes = ['revenue'];
+
+    // Check if debits contain expense accounts (purchase) or credits contain revenue (sale)
+    const isExpense = rawDebits.some(d => expenseTypes.includes(getAccount(d.account)?.type));
+    const isRevenue = rawCredits.some(c => revenueTypes.includes(getAccount(c.account)?.type));
+
+    if (isExpense) {
+      // Purchase: DR Expense (net) + DR 1030 GST Receivable (gst) | CR as-is
+      debits = [];
+      let totalGst = 0;
+      rawDebits.forEach(d => {
+        const acc = getAccount(d.account);
+        if (expenseTypes.includes(acc?.type)) {
+          const gst = +(d.amount * .1).toFixed(2);
+          const net = +(d.amount - gst).toFixed(2);
+          totalGst += gst;
+          debits.push({ account: d.account, amount: net });
+        } else {
+          debits.push(d);
+        }
+      });
+      if (totalGst > 0) debits.push({ account: '1030', amount: totalGst });
+    } else if (isRevenue) {
+      // Sale: DR as-is | CR Revenue (net) + CR 2020 GST Payable (gst)
+      credits = [];
+      let totalGst = 0;
+      rawCredits.forEach(c => {
+        const acc = getAccount(c.account);
+        if (revenueTypes.includes(acc?.type)) {
+          const gst = +(c.amount * .1).toFixed(2);
+          const net = +(c.amount - gst).toFixed(2);
+          totalGst += gst;
+          credits.push({ account: c.account, amount: net });
+        } else {
+          credits.push(c);
+        }
+      });
+      if (totalGst > 0) credits.push({ account: '2020', amount: totalGst });
+    }
+  }
+
+  // Validate balance after GST split
+  const totalD = debits.reduce((s, d) => s + d.amount, 0);
+  const totalC = credits.reduce((s, c) => s + c.amount, 0);
+  if (Math.abs(totalD - totalC) > 0.02) {
+    toast('Transaction must balance — debits equal credits'); return;
+  }
+
+  const totalAmount = debits.reduce((s, d) => s + d.amount, 0);
+
+  transactions.unshift({
+    id: uid(),
+    date,
+    ref: ref || 'TX-' + uid().slice(0,6),
+    desc,
+    type: 'journal',
+    debits,
+    credits,
+    amount: totalAmount,
+    gst: gstOn ? 'yes' : 'no',
+    method: 'Journal'
+  });
+
+  save();
+  renderAll();
+
+  // Reset form
+  document.getElementById('tx-desc').value = '';
+  document.getElementById('tx-ref').value = '';
+  document.getElementById('tx-gst-toggle').checked = false;
+  onGstToggle();
+  document.getElementById('tx-debit-lines').innerHTML = `
+    <div class="tx-line" style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;">
+      <select id="tx-debit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+        <option value="">Select Account...</option>
+      </select>
+      <input type="number" id="tx-debit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
+      <button class="btn btn-ghost btn-sm" onclick="addTxLine('debit')" style="padding:4px 8px;">+</button>
+    </div>
+  `;
+  document.getElementById('tx-credit-lines').innerHTML = `
+    <div class="tx-line" style="display:grid;grid-template-columns:2fr 1fr 40px;gap:8px;margin-bottom:8px;">
+      <select id="tx-credit-account-0" class="tx-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+        <option value="">Select Account...</option>
+      </select>
+      <input type="number" id="tx-credit-amount-0" placeholder="0.00" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
+      <button class="btn btn-ghost btn-sm" onclick="addTxLine('credit')" style="padding:4px 8px;">+</button>
+    </div>
+  `;
+  txDebitLines = 1; txCreditLines = 1;
+  initTxLines();
+  validateTx();
+  toast('Transaction saved ✓' + (gstOn ? ' (GST split applied)' : ''));
+}
+
+// ══════════════════════════════════════════════════════
+//  JOURNAL FUNCTIONS
+// ══════════════════════════════════════════════════════
+function initJournalLines() {
+  const container = document.getElementById('journal-lines');
+  container.innerHTML = '';
+  addJournalLine();
+  addJournalLine();
+}
+
+function addJournalLine() {
+  const container = document.getElementById('journal-lines');
+  const lineId = 'jl-' + uid();
+  const div = document.createElement('div');
+  div.className = 'journal-line';
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 40px;gap:8px;margin-bottom:8px;align-items:center;';
+  div.dataset.lineId = lineId;
+  div.innerHTML = `
+    <select class="journal-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+      <option value="">Select Account...</option>
+      ${Object.entries(CHART_OF_ACCOUNTS).map(([group, data]) => `
+        <optgroup label="${group.toUpperCase()}">
+          ${data.accounts.map(a => `<option value="${a.id}">${a.id} - ${a.name}</option>`).join('')}
+        </optgroup>
+      `).join('')}
+    </select>
+    <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#4f8ef7':'var(--border)';validateJournal();updateJournalGstPreview()">
+    <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#e8c547':'var(--border)';validateJournal()">
+    <button class="btn btn-danger btn-sm" onclick="removeJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
+  `;
+  container.appendChild(div);
+}
+
+function removeJournalLine(lineId) {
+  const lines = document.querySelectorAll('.journal-line');
+  if (lines.length <= 2) {
+    toast('Minimum 2 lines required for double-entry');
+    return;
+  }
+  document.querySelector(`.journal-line[data-line-id="${lineId}"]`).remove();
+  validateJournal();
+}
+
+function validateJournal() {
+  const lines = document.querySelectorAll('.journal-line');
+  let totalDebits = 0, totalCredits = 0, lineCount = 0;
+  
+  lines.forEach(line => {
+    const account = line.querySelector('.journal-account').value;
+    const debit = parseFloat(line.querySelector('.journal-debit').value) || 0;
+    const credit = parseFloat(line.querySelector('.journal-credit').value) || 0;
+    
+    if (account && (debit > 0 || credit > 0)) {
+      lineCount++;
+      totalDebits += debit;
+      totalCredits += credit;
+    }
+  });
+  
+  const validationDiv = document.getElementById('journal-validation');
+  const diff = Math.abs(totalDebits - totalCredits);
+  
+  if (lineCount < 2) {
+    validationDiv.style.display = 'block';
+    validationDiv.style.background = 'var(--surface2)';
+    validationDiv.style.color = 'var(--text2)';
+    validationDiv.innerHTML = '⚠ Minimum 2 accounts required for double-entry';
+    return false;
+  } else if (diff > 0.01) {
+    validationDiv.style.display = 'block';
+    validationDiv.style.background = '#fde2e2';
+    validationDiv.style.color = 'var(--danger)';
+    validationDiv.innerHTML = `❌ Out of balance by ${fmt(diff)} — Debits must equal Credits`;
+    return false;
+  } else {
+    validationDiv.style.display = 'block';
+    validationDiv.style.background = '#d4edda';
+    validationDiv.style.color = 'var(--success)';
+    validationDiv.innerHTML = `✓ Balanced — ${fmt(totalDebits)} = ${fmt(totalCredits)}`;
+    return true;
+  }
+}
+
+function onJournalGstToggle() {
+  const on = document.getElementById('journal-gst-toggle').checked;
+  document.getElementById('journal-gst-slider').style.background = on ? 'var(--success)' : 'var(--border)';
+  document.getElementById('journal-gst-knob').style.left = on ? '23px' : '3px';
+  updateJournalGstPreview();
+}
+
+function updateJournalGstPreview() {
+  const on = document.getElementById('journal-gst-toggle').checked;
+  const preview = document.getElementById('journal-gst-preview');
+  if (!on) { preview.style.display = 'none'; return; }
+
+  let totalDebits = 0;
+  document.querySelectorAll('.journal-line').forEach(line => {
+    totalDebits += parseFloat(line.querySelector('.journal-debit').value) || 0;
+  });
+
+  if (totalDebits === 0) { preview.style.display = 'none'; return; }
+  const gst = +(totalDebits * .1).toFixed(2);
+  const net = +(totalDebits - gst).toFixed(2);
+  preview.style.display = 'block';
+  preview.innerHTML =
+    `✓ GST will be auto-split on save:<br>` +
+    `&nbsp;&nbsp;Gross: ${fmt(totalDebits)} → Net: ${fmt(net)} + GST: ${fmt(gst)}`;
+}
+
+function saveJournal() {
+  if (!validateJournal()) {
+    toast('Cannot save — journal is out of balance');
+    return;
+  }
+  
+  const date = document.getElementById('journal-date').value;
+  const ref = document.getElementById('journal-ref').value.trim();
+  const narration = document.getElementById('journal-narration').value.trim();
+  const gstOn = document.getElementById('journal-gst-toggle').checked;
+  
+  if (!date || !ref || !narration) {
+    toast('Please fill in date, reference and narration');
+    return;
+  }
+  
+  if (journals.some(j => j.ref === ref)) {
+    toast('Reference number already exists');
+    return;
+  }
+  
+  let lines = [];
+  document.querySelectorAll('.journal-line').forEach(line => {
+    const accountId = line.querySelector('.journal-account').value;
+    const debit = parseFloat(line.querySelector('.journal-debit').value) || 0;
+    const credit = parseFloat(line.querySelector('.journal-credit').value) || 0;
+    if (accountId && (debit > 0 || credit > 0)) {
+      lines.push({ accountId, accountName: getAccount(accountId)?.name || accountId, debit, credit });
+    }
+  });
+
+  // ── GST AUTO-SPLIT ──
+  if (gstOn) {
+    const finalLines = [];
+    let gstDebit = 0, gstCredit = 0;
+    lines.forEach(l => {
+      const acc = getAccount(l.accountId);
+      if (acc?.type === 'expense' && l.debit > 0) {
+        const gst = +(l.debit * .1).toFixed(2);
+        const net = +(l.debit - gst).toFixed(2);
+        gstDebit += gst;
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: net, credit: 0 });
+      } else if (acc?.type === 'revenue' && l.credit > 0) {
+        const gst = +(l.credit * .1).toFixed(2);
+        const net = +(l.credit - gst).toFixed(2);
+        gstCredit += gst;
+        finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: net });
+      } else {
+        finalLines.push(l);
+      }
+    });
+    if (gstDebit > 0) finalLines.push({ accountId: '1030', accountName: 'GST Receivable', debit: gstDebit, credit: 0 });
+    if (gstCredit > 0) finalLines.push({ accountId: '2020', accountName: 'GST Payable', debit: 0, credit: gstCredit });
+    lines = finalLines;
+  }
+  
+  const total = lines.reduce((sum, l) => sum + l.debit, 0);
+  
+  journals.unshift({
+    id: uid(),
+    date,
+    ref,
+    narration,
+    lines,
+    total,
+    gst: gstOn ? 'yes' : 'no',
+    createdAt: new Date().toISOString()
+  });
+  
+  save();
+  initJournalLines();
+  document.getElementById('journal-ref').value = '';
+  document.getElementById('journal-narration').value = '';
+  document.getElementById('journal-date').valueAsDate = new Date();
+  document.getElementById('journal-gst-toggle').checked = false;
+  onJournalGstToggle();
+  renderAll();
+  toast('Journal entry saved ✓' + (gstOn ? ' (GST split applied)' : ''));
+}
+
+function renderJournals() {
+  // Compute totals across all sources (journals + double-entry transactions)
+  let totalDebits = 0, totalCredits = 0, entryCount = 0;
+
+  journals.forEach(j => {
+    j.lines.forEach(l => { totalDebits += l.debit; totalCredits += l.credit; });
+    entryCount++;
+  });
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => totalDebits += d.amount);
+      t.credits.forEach(c => totalCredits += c.amount);
+      entryCount++;
+    }
+  });
+
+  document.getElementById('journal-count').textContent = entryCount;
+  document.getElementById('journal-debits').textContent = fmt(totalDebits);
+  document.getElementById('journal-credits').textContent = fmt(totalCredits);
+  document.getElementById('journal-balance').textContent = fmt(Math.abs(totalDebits - totalCredits));
+
+  const tbody = document.getElementById('journals-tbody');
+
+  // Build combined list of all journal entries sorted by date desc
+  const allEntries = [];
+
+  // From journals array
+  journals.forEach(j => {
+    allEntries.push({ date: j.date, ref: j.ref, narration: j.narration, total: j.total, id: j.id, source: 'journal',
+      lines: j.lines.map(l => ({ account: l.accountId, accountName: l.accountName || getAccount(l.accountId)?.name || l.accountId, debit: l.debit, credit: l.credit }))
+    });
+  });
+
+  // From double-entry transactions
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      const lines = [
+        ...t.debits.map(d => ({ account: d.account, accountName: getAccount(d.account)?.name || d.account, debit: d.amount, credit: 0 })),
+        ...t.credits.map(c => ({ account: c.account, accountName: getAccount(c.account)?.name || c.account, debit: 0, credit: c.amount }))
+      ];
+      allEntries.push({ date: t.date, ref: t.ref, narration: t.desc, total: t.amount, id: t.id, source: 'transaction', lines });
+    }
+  });
+
+  allEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  if (allEntries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3);">No journal entries yet</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = allEntries.map(j => {
+    const lineRows = j.lines.map(l => `
+      <tr style="background:var(--surface2);">
+        <td style="padding:4px 12px;font-size:12px;color:var(--text3);"></td>
+        <td style="padding:4px 12px;font-size:12px;color:var(--text3);"></td>
+        <td style="padding:4px 12px 4px 28px;font-size:12px;color:var(--text2);">${l.account} — ${l.accountName}</td>
+        <td style="padding:4px 12px;font-size:12px;"></td>
+        <td class="mono" style="padding:4px 12px;font-size:12px;color:${l.debit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.debit > 0 ? fmt(l.debit) : '—'}</td>
+        <td class="mono" style="padding:4px 12px;font-size:12px;color:${l.credit > 0 ? 'var(--text)' : 'var(--text3)'};">${l.credit > 0 ? fmt(l.credit) : '—'}</td>
+        <td style="padding:4px 12px;"></td>
+      </tr>`).join('');
+
+    return `
+      <tr style="border-top:2px solid var(--border);">
+        <td style="padding:10px 12px;white-space:nowrap;"><strong>${fmtDate(j.date)}</strong></td>
+        <td style="padding:10px 12px;"><span class="mono" style="font-weight:600;font-size:12px;">${j.ref}</span></td>
+        <td style="padding:10px 12px;font-style:italic;color:var(--text2);">${j.narration}</td>
+        <td class="mono" style="padding:10px 12px;font-weight:600;">${fmt(j.total)}</td>
+        <td style="padding:10px 12px;"></td>
+        <td style="padding:10px 12px;"></td>
+        <td style="padding:10px 12px;white-space:nowrap;">
+          ${j.source === 'journal'
+            ? `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}')" style="color:var(--text);">✎ Edit</button>
+               <button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}','tx')" style="color:var(--text);">✎ Edit</button>
+               <button class="btn btn-danger btn-sm" onclick="deleteTx('${j.id}')">✕</button>`}
+        </td>
+      </tr>
+      ${lineRows}
+    `;
+  }).join('');
+}
+
+function deleteJournal(id) {
+  if (!confirm('Delete this journal entry?')) return;
+  journals = journals.filter(j => j.id !== id);
+  save();
+  renderAll();
+  toast('Journal deleted');
+}
+
+// ── EDIT JOURNAL ──
+let editJournalId = null;
+let editJournalSource = 'journal'; // 'journal' or 'tx'
+
+function buildAccountOptionsHtml(selectedId) {
+  let html = '<option value="">Select Account...</option>';
+  Object.entries(CHART_OF_ACCOUNTS).forEach(([group, data]) => {
+    html += `<optgroup label="${group.toUpperCase()}">`;
+    data.accounts.forEach(a => {
+      html += `<option value="${a.id}" ${a.id === selectedId ? 'selected' : ''}>${a.id} — ${a.name}</option>`;
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+
+function openEditJournal(id, source = 'journal') {
+  editJournalId = id;
+  editJournalSource = source;
+
+  let entry;
+  if (source === 'journal') {
+    entry = journals.find(j => j.id === id);
+    if (!entry) return;
+    document.getElementById('ej-date').value = entry.date;
+    document.getElementById('ej-ref').value = entry.ref;
+    document.getElementById('ej-narration').value = entry.narration;
+
+    const container = document.getElementById('ej-lines');
+    container.innerHTML = '';
+    entry.lines.forEach(l => addEditJournalLine(l.accountId, l.debit, l.credit));
+  } else {
+    // transaction type='journal'
+    entry = transactions.find(t => t.id === id);
+    if (!entry) return;
+    document.getElementById('ej-date').value = entry.date;
+    document.getElementById('ej-ref').value = entry.ref;
+    document.getElementById('ej-narration').value = entry.desc;
+
+    const container = document.getElementById('ej-lines');
+    container.innerHTML = '';
+    entry.debits.forEach(d => addEditJournalLine(d.account, d.amount, 0));
+    entry.credits.forEach(c => addEditJournalLine(c.account, 0, c.amount));
+  }
+
+  validateEditJournal();
+  document.getElementById('edit-journal-modal').classList.add('show');
+}
+
+function addEditJournalLine(accountId = '', debit = '', credit = '') {
+  const container = document.getElementById('ej-lines');
+  const lineId = 'ejl-' + uid();
+  const div = document.createElement('div');
+  div.className = 'ej-line';
+  div.dataset.lineId = lineId;
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 40px;gap:8px;margin-bottom:8px;align-items:center;';
+  div.innerHTML = `
+    <select class="ej-account" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+      ${buildAccountOptionsHtml(accountId)}
+    </select>
+    <input type="number" class="ej-debit" placeholder="Debit" step="0.01" min="0" value="${debit > 0 ? debit : ''}"
+      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);${debit > 0 ? 'border-color:#4f8ef7;' : ''}" oninput="validateEditJournal()">
+    <input type="number" class="ej-credit" placeholder="Credit" step="0.01" min="0" value="${credit > 0 ? credit : ''}"
+      style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);${credit > 0 ? 'border-color:#e8c547;' : ''}" oninput="validateEditJournal()">
+    <button class="btn btn-danger btn-sm" onclick="removeEditJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
+  `;
+  container.appendChild(div);
+}
+
+function removeEditJournalLine(lineId) {
+  const lines = document.querySelectorAll('.ej-line');
+  if (lines.length <= 2) { toast('Minimum 2 lines required'); return; }
+  document.querySelector(`.ej-line[data-line-id="${lineId}"]`).remove();
+  validateEditJournal();
+}
+
+function validateEditJournal() {
+  let totalD = 0, totalC = 0, count = 0;
+  document.querySelectorAll('.ej-line').forEach(line => {
+    const acc = line.querySelector('.ej-account').value;
+    const d = parseFloat(line.querySelector('.ej-debit').value) || 0;
+    const c = parseFloat(line.querySelector('.ej-credit').value) || 0;
+    if (acc && (d > 0 || c > 0)) { totalD += d; totalC += c; count++; }
+  });
+  const el = document.getElementById('ej-validation');
+  const diff = Math.abs(totalD - totalC);
+  el.style.display = 'block';
+  if (count < 2) {
+    el.style.background = 'var(--surface2)'; el.style.color = 'var(--text2)';
+    el.innerHTML = '⚠ Minimum 2 accounts required';
+    return false;
+  } else if (diff > 0.01) {
+    el.style.background = '#fde2e2'; el.style.color = 'var(--danger)';
+    el.innerHTML = `❌ Out of balance by ${fmt(diff)}`;
+    return false;
+  } else {
+    el.style.background = '#d4edda'; el.style.color = 'var(--success)';
+    el.innerHTML = `✓ Balanced — ${fmt(totalD)} = ${fmt(totalC)}`;
+    return true;
+  }
+}
+
+function saveEditedJournal() {
+  if (!validateEditJournal()) { toast('Cannot save — entry is out of balance'); return; }
+
+  const date = document.getElementById('ej-date').value;
+  const ref  = document.getElementById('ej-ref').value.trim();
+  const narration = document.getElementById('ej-narration').value.trim();
+  if (!date || !ref || !narration) { toast('Please fill in date, reference and narration'); return; }
+
+  // Collect lines
+  const lines = [];
+  document.querySelectorAll('.ej-line').forEach(line => {
+    const accountId = line.querySelector('.ej-account').value;
+    const debit  = parseFloat(line.querySelector('.ej-debit').value)  || 0;
+    const credit = parseFloat(line.querySelector('.ej-credit').value) || 0;
+    if (accountId && (debit > 0 || credit > 0)) {
+      lines.push({ accountId, accountName: getAccount(accountId)?.name || accountId, debit, credit });
+    }
+  });
+
+  if (editJournalSource === 'journal') {
+    const j = journals.find(j => j.id === editJournalId);
+    if (!j) return;
+    // Check ref uniqueness (allow same ref if it's this entry)
+    if (journals.some(jj => jj.ref === ref && jj.id !== editJournalId)) {
+      toast('Reference number already used by another entry'); return;
+    }
+    j.date = date;
+    j.ref = ref;
+    j.narration = narration;
+    j.lines = lines;
+    j.total = lines.reduce((s, l) => s + l.debit, 0);
+  } else {
+    // transaction source
+    const t = transactions.find(t => t.id === editJournalId);
+    if (!t) return;
+    t.date = date;
+    t.ref = ref;
+    t.desc = narration;
+    t.debits = lines.filter(l => l.debit > 0).map(l => ({ account: l.accountId, amount: l.debit }));
+    t.credits = lines.filter(l => l.credit > 0).map(l => ({ account: l.accountId, amount: l.credit }));
+    t.amount = t.debits.reduce((s, d) => s + d.amount, 0);
+  }
+
+  save();
+  closeModal('edit-journal-modal');
+  renderAll();
+  toast('Journal entry updated ✓');
+}
+
+// ══════════════════════════════════════════════════════
+//  LEDGER FUNCTIONS
+// ══════════════════════════════════════════════════════
+function renderLedger() {
+  const accountList = document.getElementById('ledger-account-list');
+  if (!accountList) return;
+  
+  const balances = {};
+  ALL_ACCOUNTS.forEach(a => balances[a.id] = { ...a, balance: 0, entries: [] });
+  
+  // Process transactions
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => {
+        if (balances[d.account]) {
+          balances[d.account].entries.push({
+            date: t.date,
+            ref: t.ref,
+            desc: t.desc,
+            debit: d.amount,
+            credit: 0
+          });
+          balances[d.account].balance += d.amount;
+        }
+      });
+      
+      t.credits.forEach(c => {
+        if (balances[c.account]) {
+          balances[c.account].entries.push({
+            date: t.date,
+            ref: t.ref,
+            desc: t.desc,
+            debit: 0,
+            credit: c.amount
+          });
+          balances[c.account].balance -= c.amount;
+        }
+      });
+    } else {
+      // Legacy single-entry transactions
+      const gstAmount = t.gst === 'yes' ? t.amount * .1 : 0;
+      const netAmount = t.amount - gstAmount;
+      
+      let accountId = '5010';
+      if (t.type === 'income') accountId = '4010';
+      else if (t.type === 'expense' && t.category.includes('Software')) accountId = '5020';
+      else if (t.type === 'expense' && t.category.includes('Hosting')) accountId = '5030';
+      else if (t.type === 'expense' && t.category.includes('Setup')) accountId = '5080';
+      else if (t.type === 'expense' && t.category.includes('Domain')) accountId = '5090';
+      else if (t.type === 'drawings') accountId = '3020';
+      else if (t.type === 'capital') accountId = '3010';
+      
+      if (t.type === 'income') {
+        balances['1010'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: t.amount, credit: 0 });
+        balances['1010'].balance += t.amount;
+        balances[accountId].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: 0, credit: t.amount });
+        balances[accountId].balance -= t.amount;
+        if (gstAmount > 0) {
+          balances['2020'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: 'GST on '+t.desc, debit: 0, credit: gstAmount });
+          balances['2020'].balance -= gstAmount;
+        }
+      } else if (t.type === 'expense') {
+        balances[accountId].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: netAmount, credit: 0 });
+        balances[accountId].balance += netAmount;
+        balances['1010'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: 0, credit: t.amount });
+        balances['1010'].balance -= t.amount;
+        if (gstAmount > 0) {
+          balances['1030'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: 'GST on '+t.desc, debit: gstAmount, credit: 0 });
+          balances['1030'].balance += gstAmount;
+        }
+      } else if (t.type === 'drawings') {
+        balances['3020'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: t.amount, credit: 0 });
+        balances['3020'].balance += t.amount;
+        balances['1010'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: 0, credit: t.amount });
+        balances['1010'].balance -= t.amount;
+      } else if (t.type === 'capital') {
+        balances['1010'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: t.amount, credit: 0 });
+        balances['1010'].balance += t.amount;
+        balances['3010'].entries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, debit: 0, credit: t.amount });
+        balances['3010'].balance -= t.amount;
+      }
+    }
+  });
+  
+  // Process journals
+  journals.forEach(j => {
+    j.lines.forEach(line => {
+      if (balances[line.accountId]) {
+        balances[line.accountId].entries.push({
+          date: j.date,
+          ref: j.ref,
+          desc: j.narration,
+          debit: line.debit,
+          credit: line.credit
+        });
+        balances[line.accountId].balance += line.debit - line.credit;
+      }
+    });
+  });
+  
+  // Render account list
+  accountList.innerHTML = Object.entries(CHART_OF_ACCOUNTS).map(([group, data]) => `
+    <div style="border-bottom:1px solid var(--border);">
+      <div style="padding:12px 16px;background:var(--surface2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">
+        ${group}
+      </div>
+      ${data.accounts.map(a => {
+        const bal = balances[a.id].balance;
+        const isSelected = selectedLedgerAccount === a.id;
+        const isContra = a.contra || (a.type === 'liability') || (a.type === 'revenue') || (a.type === 'equity' && a.id !== '3020');
+        const displayBal = isContra ? -bal : bal;
+        return `
+        <div onclick="selectLedgerAccount('${a.id}')" style="padding:10px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;${isSelected ? 'background:rgba(232,197,71,0.15);' : ''}border-left:3px solid ${isSelected ? 'var(--accent2)' : 'transparent'};">
+          <div>
+            <div style="font-size:12px;font-weight:500;">${a.id} ${a.name}</div>
+          </div>
+          <div class="mono" style="font-size:12px;color:${displayBal >= 0 ? 'var(--text)' : 'var(--danger)'};">${fmt(Math.abs(displayBal))} ${displayBal >= 0 ? 'DR' : 'CR'}</div>
+        </div>
+        `;
+      }).join('')}
+    </div>
+  `).join('');
+  
+  // Render selected account detail
+  if (selectedLedgerAccount && balances[selectedLedgerAccount]) {
+    const account = getAccount(selectedLedgerAccount);
+    const entries = balances[selectedLedgerAccount].entries.sort((a, b) => new Date(a.date) - new Date(b.date));
+    let runningBalance = 0;
+    
+    const isContra = account.contra || (account.type === 'liability') || (account.type === 'revenue') || (account.type === 'equity' && account.id !== '3020');
+    
+    document.getElementById('ledger-account-title').textContent = account.name;
+    document.getElementById('ledger-account-code').textContent = `Account ${account.id} · ${account.type.toUpperCase()}`;
+    const displayBal = isContra ? -balances[selectedLedgerAccount].balance : balances[selectedLedgerAccount].balance;
+    document.getElementById('ledger-balance').textContent = fmt(Math.abs(displayBal)) + (displayBal >= 0 ? ' DR' : ' CR');
+    document.getElementById('ledger-balance').className = 'kpi-value ' + (displayBal >= 0 ? 'positive' : 'negative');
+    
+    const tbody = document.getElementById('ledger-detail-tbody');
+    if (entries.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3);">No entries for this account</td></tr>';
+    } else {
+      tbody.innerHTML = entries.map(e => {
+        runningBalance += (isContra ? -1 : 1) * (e.debit - e.credit);
+        const isDr = runningBalance >= 0;
+        return `
+        <tr>
+          <td>${fmtDate(e.date)}</td>
+          <td><span class="mono">${e.ref}</span></td>
+          <td>${e.desc}</td>
+          <td class="mono">${e.debit > 0 ? fmt(e.debit) : '—'}</td>
+          <td class="mono">${e.credit > 0 ? fmt(e.credit) : '—'}</td>
+          <td class="mono" style="font-weight:600;color:${isDr ? 'var(--text)' : 'var(--danger)'};">${fmt(Math.abs(runningBalance))} ${isDr ? 'DR' : 'CR'}</td>
+        </tr>
+        `;
+      }).join('');
+    }
+  } else {
+    document.getElementById('ledger-account-title').textContent = 'Select an Account';
+    document.getElementById('ledger-account-code').textContent = '';
+    document.getElementById('ledger-balance').textContent = '$0.00';
+    document.getElementById('ledger-detail-tbody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3);">Click an account from the list to view ledger</td></tr>';
+  }
+}
+
+function selectLedgerAccount(accountId) {
+  selectedLedgerAccount = accountId;
+  renderLedger();
+}
+
+// ══════════════════════════════════════════════════════
+//  CALCULATIONS
+// ══════════════════════════════════════════════════════
+function gstAmount(tx) { return tx.gst === 'yes' ? +(tx.amount * .1).toFixed(2) : 0; }
+function exGST(tx) { return tx.gst === 'yes' ? +(tx.amount - gstAmount(tx)).toFixed(2) : tx.amount; }
+
+// Build ledger balances for ALL time (no date filter) from every entry source
+function buildAllTimeLedgerBalances() {
+  const bal = {};
+  ALL_ACCOUNTS.forEach(a => bal[a.id] = 0);
+
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (bal[d.account] !== undefined) bal[d.account] += d.amount; });
+      t.credits.forEach(c => { if (bal[c.account] !== undefined) bal[c.account] -= c.amount; });
+    } else {
+      // Legacy single-entry
+      const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
+      const netAmt = t.amount - gstAmt;
+      let accId = '5010';
+      if (t.type === 'income') accId = '4010';
+      else if (t.type === 'expense' && t.category && t.category.includes('Software')) accId = '5020';
+      else if (t.type === 'expense' && t.category && t.category.includes('Hosting')) accId = '5030';
+      else if (t.type === 'expense' && t.category && t.category.includes('Setup')) accId = '5080';
+      else if (t.type === 'expense' && t.category && t.category.includes('Domain')) accId = '5090';
+      else if (t.type === 'drawings') accId = '3020';
+      else if (t.type === 'capital') accId = '3010';
+      if (t.type === 'income') {
+        bal['1010'] += t.amount; bal[accId] -= t.amount;
+        if (gstAmt > 0) bal['2020'] -= gstAmt;
+      } else if (t.type === 'expense') {
+        bal[accId] += netAmt; bal['1010'] -= t.amount;
+        if (gstAmt > 0) bal['1030'] += gstAmt;
+      } else if (t.type === 'drawings') {
+        bal['3020'] += t.amount; bal['1010'] -= t.amount;
+      } else if (t.type === 'capital') {
+        bal['1010'] += t.amount; bal['3010'] -= t.amount;
+      }
+    }
+  });
+
+  journals.forEach(j => {
+    j.lines.forEach(l => { if (bal[l.accountId] !== undefined) bal[l.accountId] += l.debit - l.credit; });
+  });
+
+  return bal;
+}
+
+// Derive summary totals from ledger balances
+function totals() {
+  const bal = buildAllTimeLedgerBalances();
+  let income = 0, expenses = 0, capital = 0, drawings = 0;
+  getAccountsByType('revenue').forEach(a => income += -(bal[a.id] || 0));
+  getAccountsByType('expense').forEach(a => expenses += (bal[a.id] || 0));
+  capital  = -(bal['3010'] || 0);
+  drawings =  (bal['3020'] || 0);
+  return { income, expenses, capital, drawings, netProfit: income - expenses };
+}
+
+function quarter(dateStr) {
+  const d = new Date(dateStr);
+  const m = d.getMonth();
+  if (m >= 6 && m <= 8) return 'Q1';
+  if (m >= 9 && m <= 11) return 'Q2';
+  if (m >= 0 && m <= 2) return 'Q3';
+  return 'Q4';
+}
+
+// Build quarterly revenue/expense breakdown from all entry sources
+function quarterlyTotals() {
+  const q = { Q1: { income: 0, expenses: 0 }, Q2: { income: 0, expenses: 0 }, Q3: { income: 0, expenses: 0 }, Q4: { income: 0, expenses: 0 } };
+
+  function addRevenue(dateStr, amount) { q[quarter(dateStr)].income += amount; }
+  function addExpense(dateStr, amount) { q[quarter(dateStr)].expenses += amount; }
+
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      // For double-entry: check if any credit goes to revenue account (4xxx) or debit to expense (5xxx)
+      t.credits.forEach(c => {
+        const acc = getAccount(c.account);
+        if (acc && acc.type === 'revenue') addRevenue(t.date, c.amount);
+      });
+      t.debits.forEach(d => {
+        const acc = getAccount(d.account);
+        if (acc && acc.type === 'expense') addExpense(t.date, d.amount);
+      });
+    } else {
+      if (t.type === 'income') addRevenue(t.date, t.amount);
+      else if (t.type === 'expense') addExpense(t.date, t.amount);
+    }
+  });
+
+  journals.forEach(j => {
+    j.lines.forEach(l => {
+      const acc = getAccount(l.accountId);
+      if (!acc) return;
+      if (acc.type === 'revenue' && l.credit > 0) addRevenue(j.date, l.credit);
+      if (acc.type === 'expense' && l.debit > 0)  addExpense(j.date, l.debit);
+    });
+  });
+
+  return q;
+}
+
+function groupByCategory(type) {
+  const map = {};
+  for (const t of transactions) {
+    if (t.type !== type) continue;
+    map[t.category] = (map[t.category] || 0) + t.amount;
+  }
+  return map;
+}
+
+// ══════════════════════════════════════════════════════
+//  RENDER ALL
+// ══════════════════════════════════════════════════════
+function renderAll() {
+  renderKPIs();
+  renderRecent();
+  renderQuarterly();
+  renderTransactions();
+  renderJournals();
+  renderLedger();
+  renderIncomeStatement();  // Now uses double-entry data
+  renderBalanceSheet();     // Now uses double-entry data
+  renderGST();
+  renderAssets();
+  renderUsersTable();
+  renderTax();
+}
+
+
+// ── KPIs ──
+function renderKPIs() {
+  const t = totals();
+  const swMRRTotal = portfolioMRR();
+  document.getElementById('kpi-strip').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value positive">${fmt(t.income)}</div></div>
+    <div class="kpi"><div class="kpi-label">Portfolio MRR</div><div class="kpi-value positive">${fmt(swMRRTotal)}</div></div>
+    <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value negative">${fmt(t.expenses)}</div></div>
+    <div class="kpi"><div class="kpi-label">Net Profit / (Loss)</div><div class="kpi-value ${t.netProfit >= 0 ? 'positive' : 'negative'}">${fmt(t.netProfit)}</div></div>
+    <div class="kpi"><div class="kpi-label">Drawings</div><div class="kpi-value">${fmt(t.drawings)}</div></div>
+  `;
+}
+
+// ── RECENT ──
+function renderRecent() {
+  const tbody = document.getElementById('recent-tbody');
+  const recent = transactions.slice(0, 10);
+  tbody.innerHTML = recent.map(t => `
+    <tr>
+      <td>${fmtDate(t.date)}</td>
+      <td><span class="mono">${t.ref || 'TX-'+t.id.slice(0,4)}</span></td>
+      <td>${t.desc}</td>
+      <td class="mono ${t.type === 'income' || t.type === 'capital' ? 'positive' : 'negative'}">${t.type === 'income' || t.type === 'capital' ? '' : '–'}${fmt(t.amount)}</td>
+    </tr>
+  `).join('');
+}
+
+// ── QUARTERLY ──
+function renderQuarterly() {
+  const q = quarterlyTotals();
+  const tot = { income: 0, expenses: 0 };
+  ['Q1','Q2','Q3','Q4'].forEach(k => { tot.income += q[k].income; tot.expenses += q[k].expenses; });
+  document.getElementById('quarterly-tbody').innerHTML = `
+    <tr><td><b>Revenue</b></td>${['Q1','Q2','Q3','Q4'].map(k=>`<td class="mono positive">${fmt(q[k].income)}</td>`).join('')}<td class="mono positive"><b>${fmt(tot.income)}</b></td></tr>
+    <tr><td><b>Expenses</b></td>${['Q1','Q2','Q3','Q4'].map(k=>`<td class="mono negative">${fmt(q[k].expenses)}</td>`).join('')}<td class="mono negative"><b>${fmt(tot.expenses)}</b></td></tr>
+    <tr><td><b>Net Profit</b></td>${['Q1','Q2','Q3','Q4'].map(k=>{const np=q[k].income-q[k].expenses;return`<td class="mono ${np>=0?'positive':'negative'}">${fmt(np)}</td>`}).join('')}<td class="mono ${(tot.income-tot.expenses)>=0?'positive':'negative'}"><b>${fmt(tot.income-tot.expenses)}</b></td></tr>
+  `;
+}
+
+// ── TRANSACTIONS LIST ──
+function renderTransactions() {
+  const search = (document.getElementById('search-tx')?.value || '').toLowerCase();
+  const typeFilter = document.getElementById('filter-type')?.value || '';
+  const fyFilter2 = document.getElementById('filter-fy')?.value || '';
+  const filtered = transactions.filter(t => {
+    const matchType = !typeFilter || t.type === typeFilter;
+    const matchSearch = !search || t.desc.toLowerCase().includes(search) || (t.category && t.category.toLowerCase().includes(search));
+    let matchFY = true;
+    if (fyFilter2) {
+      const fy = parseInt(fyFilter2);
+      const d = new Date(t.date);
+      matchFY = d >= new Date(`${fy-1}-07-01`) && d <= new Date(`${fy}-06-30`);
+    }
+    return matchType && matchSearch && matchFY;
+  });
+  document.getElementById('tx-tbody').innerHTML = filtered.map(t => {
+    let debitAccounts = '', creditAccounts = '';
+    if (t.type === 'journal' && t.debits && t.credits) {
+      debitAccounts = t.debits.map(d => `${d.account} ${getAccount(d.account)?.name || ''}`).join(', ');
+      creditAccounts = t.credits.map(c => `${c.account} ${getAccount(c.account)?.name || ''}`).join(', ');
+    } else {
+      debitAccounts = t.type === 'income' || t.type === 'capital' ? 'Bank' : t.category || t.type;
+      creditAccounts = t.type === 'income' || t.type === 'capital' ? t.category || t.type : 'Bank';
+    }
+    
+    return `<tr>
+      <td>${fmtDate(t.date)}</td>
+      <td><span class="mono">${t.ref || 'TX-'+t.id.slice(0,4)}</span></td>
+      <td>${t.desc}</td>
+      <td style="font-size:11px;">${debitAccounts}</td>
+      <td style="font-size:11px;">${creditAccounts}</td>
+      <td class="mono">${fmt(t.amount)}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteTx('${t.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── INCOME STATEMENT ──
+function fyFilter(txList) {
+  const fy = parseInt(document.getElementById('is-fy')?.value || '2026');
+  const start = new Date(`${fy-1}-07-01`);
+  const end   = new Date(`${fy}-06-30`);
+  return txList.filter(t => { const d = new Date(t.date); return d >= start && d <= end; });
+}
+
+// Build ledger balances for a given FY from ALL entry sources
+function buildLedgerBalancesForFY(fyVal) {
+  const fy = parseInt(fyVal || '2026');
+  const start = new Date(`${fy-1}-07-01`);
+  const end   = new Date(`${fy}-06-30`);
+
+  const balances = {};
+  ALL_ACCOUNTS.forEach(a => balances[a.id] = 0);
+
+  function inFY(dateStr) {
+    const d = new Date(dateStr);
+    return d >= start && d <= end;
+  }
+
+  // Process double-entry transactions (type === 'journal')
+  transactions.forEach(t => {
+    if (!inFY(t.date)) return;
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (balances[d.account] !== undefined) balances[d.account] += d.amount; });
+      t.credits.forEach(c => { if (balances[c.account] !== undefined) balances[c.account] -= c.amount; });
+    } else {
+      // Legacy single-entry transactions — map to accounts
+      const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
+      const netAmt = t.amount - gstAmt;
+      let accId = '5010';
+      if (t.type === 'income') accId = '4010';
+      else if (t.type === 'expense' && t.category && t.category.includes('Software')) accId = '5020';
+      else if (t.type === 'expense' && t.category && t.category.includes('Hosting')) accId = '5030';
+      else if (t.type === 'expense' && (t.category && t.category.includes('Setup'))) accId = '5080';
+      else if (t.type === 'expense' && t.category && t.category.includes('Domain')) accId = '5090';
+      else if (t.type === 'drawings') accId = '3020';
+      else if (t.type === 'capital') accId = '3010';
+
+      if (t.type === 'income') {
+        balances['1010'] = (balances['1010'] || 0) + t.amount;
+        balances[accId] = (balances[accId] || 0) - t.amount;
+        if (gstAmt > 0) balances['2020'] = (balances['2020'] || 0) - gstAmt;
+      } else if (t.type === 'expense') {
+        balances[accId] = (balances[accId] || 0) + netAmt;
+        balances['1010'] = (balances['1010'] || 0) - t.amount;
+        if (gstAmt > 0) balances['1030'] = (balances['1030'] || 0) + gstAmt;
+      } else if (t.type === 'drawings') {
+        balances['3020'] = (balances['3020'] || 0) + t.amount;
+        balances['1010'] = (balances['1010'] || 0) - t.amount;
+      } else if (t.type === 'capital') {
+        balances['1010'] = (balances['1010'] || 0) + t.amount;
+        balances['3010'] = (balances['3010'] || 0) - t.amount;
+      }
+    }
+  });
+
+  // Process general journals
+  journals.forEach(j => {
+    if (!inFY(j.date)) return;
+    j.lines.forEach(l => {
+      if (balances[l.accountId] !== undefined) balances[l.accountId] += l.debit - l.credit;
+    });
+  });
+
+  return balances;
+}
+
+function totalsFiltered() {
+  let income = 0, expenses = 0, capital = 0, drawings = 0;
+  for (const t of fyFilter(transactions)) {
+    if (t.type === 'income') income += t.amount;
+    else if (t.type === 'expense') expenses += t.amount;
+    else if (t.type === 'capital') capital += t.amount;
+    else if (t.type === 'drawings') drawings += t.amount;
+  }
+  return { income, expenses, capital, drawings, netProfit: income - expenses };
+}
+
+function renderIncomeStatement() {
+  const entity = document.getElementById('entity-name')?.value || 'Tayla';
+  const fyVal = document.getElementById('is-fy')?.value || '2026';
+  document.getElementById('is-period').textContent = `For the year ending 30 June ${fyVal}`;
+
+  const fy = parseInt(fyVal);
+  const fyStart = new Date(`${fy-1}-07-01`);
+  const fyEnd   = new Date(`${fy}-06-30`);
+
+  // Get balances from ALL entries (transactions + journals)
+  const balances = buildLedgerBalancesForFY(fyVal);
+
+  // Revenue accounts (4xxx) — credit-normal, so balance is negative in our DR system → revenue = -balance
+  const revenueAccounts = getAccountsByType('revenue');
+  let totalRevenue = 0;
+  const revenueLines = [];
+  revenueAccounts.forEach(a => {
+    const val = -(balances[a.id] || 0); // credit-normal
+    if (val !== 0) {
+      revenueLines.push({ name: `${a.id} ${a.name}`, value: val });
+      totalRevenue += val;
+    }
+  });
+
+  // Software MRR income (user-configured)
+  const swIncomeLines = getSoftwareIncomeLines(fyStart, fyEnd);
+  const swIncomeTotal = Object.values(swIncomeLines).reduce((s,v)=>s+v,0);
+  totalRevenue += swIncomeTotal;
+
+  // Expense accounts (5xxx) — debit-normal, so balance is positive
+  const expenseAccounts = getAccountsByType('expense');
+  let totalExpenses = 0;
+  const expenseLines = [];
+  expenseAccounts.forEach(a => {
+    const val = balances[a.id] || 0; // debit-normal
+    if (val !== 0) {
+      expenseLines.push({ name: `${a.id} ${a.name}`, value: val });
+      totalExpenses += val;
+    }
+  });
+
+  const netProfit = totalRevenue - totalExpenses;
+
+  document.getElementById('income-statement-body').innerHTML = `
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;">${entity}</div>
+      <div style="font-size:13px;color:var(--text2);">Income Statement — Year ending 30 June ${fyVal}</div>
+      <div style="font-size:12px;color:var(--text3);">Derived from all journal entries and transactions · All figures in AUD</div>
+    </div>
+
+    <div class="section-title">Revenue</div>
+    ${revenueLines.length ? revenueLines.map(l => row(l.name, l.value, true)).join('') : ''}
+    ${Object.keys(swIncomeLines).length ? Object.entries(swIncomeLines).map(([c,v]) => row(c, v, true)).join('') : ''}
+    ${totalRevenue === 0 ? row('No revenue recorded', 0) : ''}
+    ${rowTotal('Total Revenue', totalRevenue, true)}
+
+    <div style="margin-top:20px;"></div>
+    <div class="section-title">Expenses</div>
+    ${expenseLines.length ? expenseLines.map(l => row(l.name, l.value)).join('') : row('No expenses recorded', 0)}
+    ${rowTotal('Total Expenses', totalExpenses)}
+
+    <div style="margin-top:16px;"></div>
+    <div class="statement row grand-total">
+      <span>Net Profit / (Loss) Before Tax</span>
+      <span class="amount ${netProfit >= 0 ? 'positive' : 'negative'}">${fmtAmt(netProfit)}</span>
+    </div>
+  `;
+}
+
+function row(label, value, positive = false) {
+  const numValue = typeof value === 'number' ? value : 0;
+  return `<div class="statement row"><span>${label}</span><span class="amount ${positive && numValue > 0 ? 'positive' : numValue < 0 ? 'negative' : ''}">${fmtAmt(numValue)}</span></div>`;
+}
+function rowTotal(label, value, positive = false) {
+  return `<div class="statement row total"><span>${label}</span><span class="amount ${positive && value > 0 ? 'positive' : value < 0 ? 'negative' : ''}">${fmtAmt(value)}</span></div>`;
+}
+
+// ── BALANCE SHEET ──
+function renderBalanceSheet() {
+  // Build ALL-TIME balances (balance sheet is as-at, not period-limited)
+  const balances = {};
+  ALL_ACCOUNTS.forEach(a => balances[a.id] = 0);
+
+  // Process all transactions
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (balances[d.account] !== undefined) balances[d.account] += d.amount; });
+      t.credits.forEach(c => { if (balances[c.account] !== undefined) balances[c.account] -= c.amount; });
+    } else {
+      const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
+      const netAmt = t.amount - gstAmt;
+      let accId = '5010';
+      if (t.type === 'income') accId = '4010';
+      else if (t.type === 'expense' && t.category && t.category.includes('Software')) accId = '5020';
+      else if (t.type === 'expense' && t.category && t.category.includes('Hosting')) accId = '5030';
+      else if (t.type === 'expense' && t.category && t.category.includes('Setup')) accId = '5080';
+      else if (t.type === 'expense' && t.category && t.category.includes('Domain')) accId = '5090';
+      else if (t.type === 'drawings') accId = '3020';
+      else if (t.type === 'capital') accId = '3010';
+
+      if (t.type === 'income') {
+        balances['1010'] += t.amount; balances[accId] -= t.amount;
+        if (gstAmt > 0) balances['2020'] -= gstAmt;
+      } else if (t.type === 'expense') {
+        balances[accId] += netAmt; balances['1010'] -= t.amount;
+        if (gstAmt > 0) balances['1030'] += gstAmt;
+      } else if (t.type === 'drawings') {
+        balances['3020'] += t.amount; balances['1010'] -= t.amount;
+      } else if (t.type === 'capital') {
+        balances['1010'] += t.amount; balances['3010'] -= t.amount;
+      }
+    }
+  });
+
+  // Process all journals
+  journals.forEach(j => {
+    j.lines.forEach(l => {
+      if (balances[l.accountId] !== undefined) balances[l.accountId] += l.debit - l.credit;
+    });
+  });
+
+  // Helper: get asset/liability account value (debit-normal for assets, credit-normal for liabilities)
+  // Assets: positive balance = DR = asset
+  // Liabilities: negative balance (in DR system) = CR = liability; flip sign for display
+  // Equity: negative balance (in DR system) = CR = equity; flip sign for display
+  // Revenue: negative = CR = revenue
+  // Expenses: positive = DR = expense
+
+  // Compute Net Profit from Revenue/Expense accounts
+  let totalRevLedger = 0, totalExpLedger = 0;
+  getAccountsByType('revenue').forEach(a => totalRevLedger += -(balances[a.id] || 0));
+  getAccountsByType('expense').forEach(a => totalExpLedger += (balances[a.id] || 0));
+  const netProfitLedger = totalRevLedger - totalExpLedger;
+
+  // Asset accounts (debit-normal)
+  const assetAccounts = getAccountsByType('asset');
+  const cashBal = balances['1010'] || 0; // debit-normal
+  const arBal   = balances['1020'] || 0;
+  const gstRecBal = balances['1030'] || 0;
+  const invBal  = balances['1100'] || 0;
+  const ppeBal  = balances['1500'] || 0;
+  const accDepBal = balances['1510'] || 0; // contra asset — debit reduces it, credit is the provision
+  const intanBal = balances['1600'] || 0;
+
+  // Manually-entered assets from the assets panel (supplement ledger)
+  const ppe        = assets.filter(a => a.type === 'ppe');
+  const currentA   = assets.filter(a => a.type === 'current');
+  const intangible = assets.filter(a => a.type === 'intangible');
+  const ppeTotal        = ppe.reduce((s, a) => s + a.value, 0);
+  const currentTotal    = currentA.reduce((s, a) => s + a.value, 0);
+  const intangibleTotal = intangible.reduce((s, a) => s + a.value, 0);
+
+  // Current assets from ledger
+  const currentAssetsLedger = cashBal + arBal + gstRecBal + invBal;
+  // Non-current from ledger
+  const ppeNetLedger = ppeBal - Math.abs(accDepBal); // net of accumulated depreciation
+  const intanLedger = intanBal;
+
+  const totalCurrentAssets = currentAssetsLedger + currentTotal;
+  const totalPPE = ppeNetLedger + ppeTotal;
+  const totalIntangible = intanLedger + intangibleTotal;
+  const totalAssets = totalCurrentAssets + totalPPE + totalIntangible;
+
+  // Liability accounts (credit-normal → negative in DR system → display as positive)
+  const apBal    = -(balances['2010'] || 0);
+  const gstPayBal = -(balances['2020'] || 0);
+  const paygBal  = -(balances['2030'] || 0);
+  const superBal = -(balances['2040'] || 0);
+  const loanBal  = -(balances['2100'] || 0);
+  const annLeaveBal = -(balances['2200'] || 0);
+
+  // Manually-entered liabilities
+  const currentLiabs    = liabilities.filter(l => l.type === 'current');
+  const nonCurrentLiabs = liabilities.filter(l => l.type === 'non-current');
+  const currentLiabTotal    = currentLiabs.reduce((s, l) => s + l.value, 0);
+  const nonCurrentLiabTotal = nonCurrentLiabs.reduce((s, l) => s + l.value, 0);
+
+  // Ledger-derived current liabilities
+  const ledgerCurrentLiabs = apBal + gstPayBal + paygBal + superBal + annLeaveBal;
+  const ledgerNonCurrentLiabs = loanBal;
+
+  const totalCurrentLiabs = ledgerCurrentLiabs + currentLiabTotal;
+  const totalNonCurrentLiabs = ledgerNonCurrentLiabs + nonCurrentLiabTotal;
+  const totalLiabilities = totalCurrentLiabs + totalNonCurrentLiabs;
+
+  // Equity (credit-normal)
+  const capitalBal  = -(balances['3010'] || 0); // credit-normal → positive = capital contributed
+  const drawingsBal =  (balances['3020'] || 0); // debit-normal (contra equity) → positive = drawings taken
+  const retainedBal = -(balances['3030'] || 0);
+
+  const netEquity = capitalBal - drawingsBal + retainedBal + netProfitLedger;
+  const netAssets = totalAssets - totalLiabilities;
+
+  const today = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  const entity = document.getElementById('entity-name')?.value || 'Tayla';
+  document.getElementById('bs-date-label').textContent = `As at ${today}`;
+
+  function bsRow(label, value, indent2) {
+    const cls = indent2 ? 'statement row indent2' : 'statement row';
+    return `<div class="${cls}"><span>${label}</span><span class="amount ${value < 0 ? 'negative' : ''}">${fmtAmt(value)}</span></div>`;
+  }
+  function bsTotal(label, value, grand) {
+    const cls = grand ? 'statement row grand-total' : 'statement row total';
+    return `<div class="${cls}"><span>${label}</span><span class="amount ${value < 0 ? 'negative' : value > 0 ? 'positive' : ''}">${fmtAmt(value)}</span></div>`;
+  }
+
+  document.getElementById('balance-sheet-body').innerHTML = `
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;">${entity}</div>
+      <div style="font-size:13px;color:var(--text2);">Balance Sheet — As at ${today}</div>
+      <div style="font-size:12px;color:var(--text3);">Derived from all journal entries and transactions · All figures in AUD</div>
+    </div>
+
+    <div class="section-title">Owner's Equity</div>
+    ${bsRow('Capital', capitalBal)}
+    ${drawingsBal !== 0 ? bsRow('Less: Drawings', -drawingsBal) : ''}
+    ${retainedBal !== 0 ? bsRow('Retained Earnings', retainedBal) : ''}
+    ${bsRow('Current Year Net Profit / (Loss)', netProfitLedger)}
+    ${bsTotal('Net Equity', netEquity, false)}
+
+    <div style="margin-top:24px;"></div>
+    <div class="section-title">Assets</div>
+
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Current Assets</div>
+    ${cashBal !== 0 ? bsRow('1010 Cash at Bank', cashBal) : ''}
+    ${arBal !== 0 ? bsRow('1020 Accounts Receivable', arBal) : ''}
+    ${gstRecBal !== 0 ? bsRow('1030 GST Receivable', gstRecBal) : ''}
+    ${invBal !== 0 ? bsRow('1100 Inventory', invBal) : ''}
+    ${currentA.map(a => bsRow(a.name, a.value)).join('')}
+    ${bsTotal('Total Current Assets', totalCurrentAssets)}
+
+    ${(ppeNetLedger !== 0 || ppe.length > 0) ? `
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Property, Plant &amp; Equipment</div>
+    ${ppeBal !== 0 ? bsRow('1500 Plant &amp; Equipment', ppeBal) : ''}
+    ${accDepBal !== 0 ? bsRow('1510 Accumulated Depreciation', accDepBal) : ''}
+    ${ppe.map(a => bsRow(a.name, a.value)).join('')}
+    ${bsTotal('Total PPE (Net)', totalPPE)}` : ''}
+
+    ${(intanLedger !== 0 || intangible.length > 0) ? `
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Intangible Assets</div>
+    ${intanBal !== 0 ? bsRow('1600 Intangible Assets', intanBal) : ''}
+    ${intangible.map(a => bsRow(a.name, a.value)).join('')}
+    ${bsTotal('Total Intangibles', totalIntangible)}` : ''}
+
+    ${bsTotal('Total Assets', totalAssets, false)}
+
+    <div style="margin-top:24px;"></div>
+    <div class="section-title">Liabilities</div>
+
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Current Liabilities</div>
+    ${apBal !== 0 ? bsRow('2010 Accounts Payable', apBal) : ''}
+    ${gstPayBal !== 0 ? bsRow('2020 GST Payable', gstPayBal) : ''}
+    ${paygBal !== 0 ? bsRow('2030 PAYG Withholding Payable', paygBal) : ''}
+    ${superBal !== 0 ? bsRow('2040 Superannuation Payable', superBal) : ''}
+    ${annLeaveBal !== 0 ? bsRow('2200 Provision for Annual Leave', annLeaveBal) : ''}
+    ${currentLiabs.map(l => bsRow(l.name, l.value)).join('')}
+    ${totalCurrentLiabs > 0 ? bsTotal('Total Current Liabilities', totalCurrentLiabs) : '<div style="padding:6px 0;font-size:12px;color:var(--text3);">None</div>'}
+
+    ${(loanBal !== 0 || nonCurrentLiabs.length > 0) ? `
+    <div style="font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);padding:10px 0 4px;">Non-Current Liabilities</div>
+    ${loanBal !== 0 ? bsRow('2100 Loans Payable', loanBal) : ''}
+    ${nonCurrentLiabs.map(l => bsRow(l.name, l.value)).join('')}
+    ${bsTotal('Total Non-Current Liabilities', totalNonCurrentLiabs)}` : ''}
+
+    ${bsTotal('Total Liabilities', totalLiabilities)}
+
+    <div style="margin-top:16px;"></div>
+    ${bsTotal('Net Assets', netAssets, true)}
+
+    <div style="margin-top:8px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3);">
+      ✓ Accounting equation: Net Assets ${Math.abs(netAssets - netEquity) < 0.01 ? '=' : '≠'} Net Equity — 
+      ${Math.abs(netAssets - netEquity) < 0.01 ? '<span style="color:var(--success);font-weight:600;">BALANCED</span>' : `<span style="color:var(--danger);">Difference: ${fmt(Math.abs(netAssets - netEquity))}</span>`}
+    </div>
+  `;
+}
+
+// ── ASSETS PANEL ──
+function renderAssets() {
+  const assetEl = document.getElementById('asset-list');
+  if (assetEl) {
+    assetEl.innerHTML = assets.length ? assets.map(a => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;">${a.name}</div>
+          <div style="font-size:11px;color:var(--text3);">${a.type.toUpperCase()}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="mono" style="font-size:13px;">${fmt(a.value)}</span>
+          <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">✕</button>
+        </div>
+      </div>
+    `).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No assets recorded.</div>';
+  }
+
+  const liabEl = document.getElementById('liability-list');
+  if (liabEl) {
+    liabEl.innerHTML = liabilities.length ? liabilities.map(l => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-size:13px;font-weight:500;">${l.name}</div>
+          <div style="font-size:11px;color:var(--text3);">${l.type === 'current' ? 'Current' : 'Non-Current'}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="mono" style="font-size:13px;color:var(--danger);">${fmt(l.value)}</span>
+          <button class="btn btn-danger btn-sm" onclick="deleteLiability('${l.id}')">✕</button>
+        </div>
+      </div>
+    `).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No liabilities recorded.</div>';
+  }
+}
+
+function openAssetModal() { document.getElementById('asset-modal').classList.add('show'); }
+function saveAsset() {
+  const name = document.getElementById('asset-name').value.trim();
+  const value = parseFloat(document.getElementById('asset-value').value);
+  const type = document.getElementById('asset-type').value;
+  if (!name || isNaN(value)) { toast('Fill in all asset fields.'); return; }
+  assets.push({ id: uid(), name, value, type });
+  save(); renderAll();
+  document.getElementById('asset-modal').classList.remove('show');
+  document.getElementById('asset-name').value = '';
+  document.getElementById('asset-value').value = '';
+  toast('Asset added ✓');
+}
+function deleteAsset(id) {
+  if (!confirm('Remove this asset?')) return;
+  assets = assets.filter(a => a.id !== id);
+  save(); renderAll();
+}
+
+function openLiabilityModal() { document.getElementById('liability-modal').classList.add('show'); }
+function saveLiability() {
+  const name  = document.getElementById('liab-name').value.trim();
+  const value = parseFloat(document.getElementById('liab-value').value);
+  const type  = document.getElementById('liab-type').value;
+  if (!name || isNaN(value) || value <= 0) { toast('Fill in all liability fields.'); return; }
+  liabilities.push({ id: uid(), name, value, type });
+  save(); renderAll();
+  document.getElementById('liability-modal').classList.remove('show');
+  document.getElementById('liab-name').value = '';
+  document.getElementById('liab-value').value = '';
+  toast('Liability added ✓');
+}
+function deleteLiability(id) {
+  if (!confirm('Remove this liability?')) return;
+  liabilities = liabilities.filter(l => l.id !== id);
+  save(); renderAll();
+}
+
+// ── GST ──
+function renderGST() {
+  let gstCollected = 0, gstPaid = 0;
+  const outputEntries = [], inputEntries = [];
+  
+  transactions.forEach(t => {
+    const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
+    const netAmt = t.amount - gstAmt;
+    
+    if (t.type === 'income' && t.gst === 'yes') {
+      gstCollected += gstAmt;
+      outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: netAmt, gst: gstAmt, total: t.amount });
+    } else if (t.type === 'expense' && t.gst === 'yes') {
+      gstPaid += gstAmt;
+      inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: netAmt, gst: gstAmt, total: t.amount });
+    }
+  });
+  
+  // Also check journal entries for GST accounts
+  journals.forEach(j => {
+    j.lines.forEach(line => {
+      const acc = getAccount(line.accountId);
+      if (acc && acc.id === '2020' && line.credit > 0) {
+        gstCollected += line.credit;
+        outputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: line.credit * 10, gst: line.credit, total: line.credit * 11 });
+      }
+      if (acc && acc.id === '1030' && line.debit > 0) {
+        gstPaid += line.debit;
+        inputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: line.debit * 10, gst: line.debit, total: line.debit * 11 });
+      }
+    });
+  });
+  
+  document.getElementById('gst-collected-kpi').textContent = fmt(gstCollected);
+  document.getElementById('gst-paid-kpi').textContent = fmt(gstPaid);
+  const net = gstCollected - gstPaid;
+  document.getElementById('gst-net-kpi').textContent = fmt(Math.abs(net));
+  document.getElementById('gst-net-kpi').className = 'kpi-value ' + (net >= 0 ? 'negative' : 'positive');
+  
+  const controlBalance = gstCollected - gstPaid;
+  document.getElementById('gst-control-kpi').textContent = fmt(Math.abs(controlBalance)) + (controlBalance >= 0 ? ' CR' : ' DR');
+  document.getElementById('gst-control-kpi').className = 'kpi-value ' + (controlBalance >= 0 ? 'negative' : 'positive');
+  
+  document.getElementById('gst-output-tbody').innerHTML = outputEntries.length
+    ? outputEntries.map(e => `<tr>
+        <td>${fmtDate(e.date)}</td>
+        <td><span class="mono">${e.ref}</span></td>
+        <td>${e.desc}</td>
+        <td class="mono">${fmt(e.net)}</td>
+        <td class="mono">${fmt(e.gst)}</td>
+        <td class="mono">${fmt(e.total)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">No GST on sales recorded</td></tr>';
+  
+  document.getElementById('gst-input-tbody').innerHTML = inputEntries.length
+    ? inputEntries.map(e => `<tr>
+        <td>${fmtDate(e.date)}</td>
+        <td><span class="mono">${e.ref}</span></td>
+        <td>${e.desc}</td>
+        <td class="mono">${fmt(e.net)}</td>
+        <td class="mono">${fmt(e.gst)}</td>
+        <td class="mono">${fmt(e.total)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">No GST on purchases recorded</td></tr>';
+  
+  document.getElementById('gst-control-body').innerHTML = `
+    <div class="row"><span>GST Payable (Account 2020)</span><span class="amount negative">${fmt(gstCollected)} CR</span></div>
+    <div class="row"><span>GST Receivable (Account 1030)</span><span class="amount positive">${fmt(gstPaid)} DR</span></div>
+    <div class="row total"><span>Net GST Position</span><span class="amount ${net >= 0 ? 'negative' : 'positive'}">${fmt(Math.abs(net))} ${net >= 0 ? 'CR (Payable)' : 'DR (Refund)'}</span></div>
+    <div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;">
+      ${net > 0 
+        ? '✓ You owe the ATO ' + fmt(net) + ' — this amount should be lodged on your BAS and paid by the due date.'
+        : net < 0 
+          ? '✓ The ATO owes you ' + fmt(Math.abs(net)) + ' refund — claim this on your BAS.'
+          : '✓ GST position is neutral — no payment or refund due.'}
+    </div>
+  `;
+  
+  const qs = ['Q1','Q2','Q3','Q4'];
+  const basRows = qs.map(q => {
+    const qOutput = outputEntries.filter(e => quarter(e.date) === q).reduce((s,e) => s + e.gst, 0);
+    const qInput = inputEntries.filter(e => quarter(e.date) === q).reduce((s,e) => s + e.gst, 0);
+    const qNet = qOutput - qInput;
+    return `<tr>
+      <td>${q}</td>
+      <td class="mono">${fmt(qOutput)}</td>
+      <td class="mono">${fmt(qInput)}</td>
+      <td class="mono ${qNet >= 0 ? 'negative' : 'positive'}">${fmt(qNet)}</td>
+      <td><span class="badge ${qNet > 0 ? 'badge-operating' : qNet < 0 ? 'badge-income' : 'badge-setup'}">${qNet > 0 ? 'Payable' : qNet < 0 ? 'Refund' : 'Nil'}</span></td>
+    </tr>`;
+  });
+  
+  basRows.push(`<tr style="font-weight:600;background:var(--surface2);">
+    <td>Total</td>
+    <td class="mono">${fmt(gstCollected)}</td>
+    <td class="mono">${fmt(gstPaid)}</td>
+    <td class="mono ${net >= 0 ? 'negative' : 'positive'}">${fmt(net)}</td>
+    <td></td>
+  </tr>`);
+  
+  document.getElementById('bas-tbody').innerHTML = basRows.join('');
+}
+
+// ── USERS (multi-software) ──
+
+function swMRR(sw, monthKey) {
+  const mu = sw.monthlyUsers[monthKey] || {};
+  return sw.tiers.reduce((s, t) => s + (parseInt(mu[t.id])||0) * t.price, 0);
+}
+
+function swTotalUsers(sw, monthKey) {
+  const mu = sw.monthlyUsers[monthKey] || {};
+  const tierCount = sw.tiers.reduce((s, t) => s + (parseInt(mu[t.id])||0), 0);
+  return (parseInt(mu.free)||0) + tierCount + (parseInt(mu.staff)||0);
+}
+
+function portfolioMRR() {
+  let totalMRR = 0;
+  softwareList.forEach(sw => {
+    const filled = MONTHS.filter(m => swTotalUsers(sw, m.key) > 0);
+    if (filled.length) {
+      totalMRR += swMRR(sw, filled[filled.length-1].key);
+    }
+  });
+  return totalMRR;
+}
+
+function updateSwUsers(swId) {
+  const sw = softwareList.find(s => s.id === swId);
+  if (!sw) return;
+  MONTHS.forEach(m => {
+    const fEl = document.getElementById(`mu-${swId}-free-${m.key}`);
+    const sEl = document.getElementById(`mu-${swId}-staff-${m.key}`);
+    if (!fEl) return;
+    const entry = { free: parseInt(fEl.value)||0, staff: parseInt(sEl.value)||0 };
+    sw.tiers.forEach(t => {
+      const el = document.getElementById(`mu-${swId}-${t.id}-${m.key}`);
+      entry[t.id] = el ? parseInt(el.value)||0 : 0;
+    });
+    sw.monthlyUsers[m.key] = entry;
+  });
+  save();
+  renderUsersTable();
+  renderIncomeStatement();
+}
+
+function renderUsersTable() {
+  const kpiStrip = document.getElementById('u-kpi-strip');
+  const swSelect = document.getElementById('u-sw-select');
+  const thead    = document.getElementById('u-thead');
+  const tbody    = document.getElementById('u-tbody');
+  const title    = document.getElementById('u-table-title');
+  if (!kpiStrip || !swSelect) return;
+
+  const totalMRR = portfolioMRR();
+  const totalUsers = softwareList.reduce((sum, sw) => {
+    const filled = MONTHS.filter(m => swTotalUsers(sw, m.key) > 0);
+    return sum + (filled.length ? swTotalUsers(sw, filled[filled.length-1].key) : 0);
+  }, 0);
+  kpiStrip.innerHTML = `
+    <div class="kpi"><div class="kpi-label">Software Products</div><div class="kpi-value">${softwareList.length}</div></div>
+    <div class="kpi"><div class="kpi-label">Total Users (latest)</div><div class="kpi-value">${totalUsers || '—'}</div></div>
+    <div class="kpi"><div class="kpi-label">Portfolio MRR</div><div class="kpi-value positive">${fmt(totalMRR)}</div></div>
+    <div class="kpi"><div class="kpi-label">Portfolio ARR</div><div class="kpi-value positive">${fmt(totalMRR * 12)}</div></div>
+  `;
+
+  if (softwareList.length === 0) {
+    swSelect.innerHTML = '<option>No software — add some in Settings</option>';
+    if (thead) thead.innerHTML = '';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3);">Add a software product in Settings to start tracking users.</td></tr>';
+    return;
+  }
+
+  const currentVal = swSelect.value;
+  swSelect.innerHTML = softwareList.map(sw =>
+    `<option value="${sw.id}" ${sw.id === currentVal ? 'selected' : ''}>${sw.name}</option>`
+  ).join('');
+
+  const selectedId = swSelect.value;
+  const sw = softwareList.find(s => s.id === selectedId) || softwareList[0];
+  if (!sw) return;
+
+  if (title) title.textContent = sw.name;
+
+  const tierHeaders = sw.tiers.map(t =>
+    `<th>${t.name} <span style="font-weight:400;color:var(--text3);">$${t.price.toFixed(2)}</span></th>`
+  ).join('');
+  if (thead) thead.innerHTML = `<tr>
+    <th style="width:110px;">Month</th>
+    <th>Free</th>
+    ${tierHeaders}
+    <th>Staff</th>
+    <th>Total</th>
+    <th>MRR</th>
+    <th>MoM Change</th>
+  </tr>`;
+
+  let prevMRR = null;
+  if (tbody) tbody.innerHTML = MONTHS.map(m => {
+    const mu  = sw.monthlyUsers[m.key] || {};
+    const mrr = swMRR(sw, m.key);
+    const total = swTotalUsers(sw, m.key);
+
+    let momHtml = '—';
+    if (prevMRR !== null) {
+      const diff = mrr - prevMRR;
+      if (diff > 0)      momHtml = `<span style="color:var(--success)">▲ ${fmt(diff)}</span>`;
+      else if (diff < 0) momHtml = `<span style="color:var(--danger)">▼ ${fmt(Math.abs(diff))}</span>`;
+      else               momHtml = `<span style="color:var(--text3)">—</span>`;
+    }
+    prevMRR = mrr;
+
+    const inp = (id, val) => `<input type="number" id="${id}" min="0" value="${val}" style="width:64px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);" oninput="updateSwUsers('${sw.id}')">`;
+    const tierInputs = sw.tiers.map(t =>
+      `<td>${inp(`mu-${sw.id}-${t.id}-${m.key}`, parseInt(mu[t.id])||0)}</td>`
+    ).join('');
+
+    return `<tr>
+      <td style="font-weight:500;">${m.label}</td>
+      <td>${inp(`mu-${sw.id}-free-${m.key}`,  parseInt(mu.free)||0)}</td>
+      ${tierInputs}
+      <td>${inp(`mu-${sw.id}-staff-${m.key}`, parseInt(mu.staff)||0)}</td>
+      <td class="mono" style="font-weight:600;">${total || '—'}</td>
+      <td class="mono positive">${mrr > 0 ? fmt(mrr) : '—'}</td>
+      <td>${momHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  EDIT / DELETE
+// ══════════════════════════════════════════════════════
+function openEditModal(id) {
+  const t = transactions.find(x => x.id === id);
+  if (!t) return;
+  editId = id;
+  document.getElementById('edit-date').value = t.date;
+  document.getElementById('edit-type').value = t.type;
+  updateEditCats();
+  document.getElementById('edit-desc').value = t.desc;
+  document.getElementById('edit-amount').value = t.amount;
+  document.getElementById('edit-category').value = t.category;
+  document.getElementById('edit-gst').value = t.gst;
+  document.getElementById('edit-method').value = t.method;
+  document.getElementById('edit-modal').classList.add('show');
+}
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('show'); editId = null; }
+function saveEdit() {
+  const t = transactions.find(x => x.id === editId);
+  if (!t) return;
+  t.date = document.getElementById('edit-date').value;
+  t.type = document.getElementById('edit-type').value;
+  t.desc = document.getElementById('edit-desc').value;
+  t.amount = parseFloat(document.getElementById('edit-amount').value);
+  t.category = document.getElementById('edit-category').value;
+  t.gst = document.getElementById('edit-gst').value;
+  t.method = document.getElementById('edit-method').value;
+  save(); renderAll(); closeEditModal(); toast('Transaction updated ✓');
+}
+function deleteTx(id) {
+  if (!confirm('Delete this transaction?')) return;
+  transactions = transactions.filter(t => t.id !== id);
+  save(); renderAll(); toast('Deleted');
+}
+
+// ══════════════════════════════════════════════════════
+//  EXPORTS
+// ══════════════════════════════════════════════════════
+function exportPDF() {
+  const entity = document.getElementById('entity-name')?.value || appSettings.bizName || 'Tayla';
+  const fyVal  = document.getElementById('is-fy')?.value || '2026';
+  const today  = new Date().toLocaleDateString('en-AU', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const isHtml = document.getElementById('income-statement-body')?.innerHTML || '';
+  const bsHtml = document.getElementById('balance-sheet-body')?.innerHTML || '';
+
+  const gstC = transactions.filter(t=>t.type==='income'&&t.gst==='yes').reduce((s,t)=>s+gstAmount(t),0);
+  const gstP = transactions.filter(t=>t.type==='expense'&&t.gst==='yes').reduce((s,t)=>s+gstAmount(t),0);
+  const gstNet = gstC - gstP;
+  const gstRows = ['Q1','Q2','Q3','Q4'].map(q => {
+    const c = transactions.filter(t=>quarter(t.date)===q&&t.type==='income'&&t.gst==='yes').reduce((s,t)=>s+gstAmount(t),0);
+    const p = transactions.filter(t=>quarter(t.date)===q&&t.type==='expense'&&t.gst==='yes').reduce((s,t)=>s+gstAmount(t),0);
+    const n = c - p;
+    return `<tr><td>${q}</td><td>${fmt(c)}</td><td>${fmt(p)}</td><td style="color:${n>=0?'#c0392b':'#27ae60'}">${fmt(n)}</td></tr>`;
+  }).join('');
+
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${entity} — Financial Reports FY${fyVal}</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', sans-serif; font-size: 13px; color: #1a1a2e; background: #fff; padding: 0; }
+    .report-page { padding: 52px 56px; max-width: 820px; margin: 0 auto; page-break-after: always; }
+    .report-page:last-child { page-break-after: avoid; }
+    .report-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 2px solid #1a1a2e; }
+    .report-header-left .entity { font-family: 'DM Serif Display', serif; font-size: 26px; color: #1a1a2e; }
+    .report-header-left .subtitle { font-size: 12px; color: #5c5c7a; margin-top: 4px; }
+    .report-header-right { text-align: right; font-size: 11px; color: #9f9fba; line-height: 1.6; }
+    .report-title { font-family: 'DM Serif Display', serif; font-size: 18px; margin-bottom: 24px; color: #1a1a2e; }
+    .statement .section-title { font-family: 'DM Serif Display', serif; font-size: 15px; padding: 12px 0 6px; border-bottom: 1.5px solid #1a1a2e; margin-bottom: 4px; }
+    .statement .row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0 5px 16px; }
+    .statement .row.total { font-weight: 600; border-top: 1px solid #e2ddd6; padding-top: 8px; margin-top: 4px; }
+    .statement .row.grand-total { font-weight: 700; font-size: 14px; border-top: 2px solid #1a1a2e; border-bottom: 3px double #1a1a2e; padding: 8px 0; }
+    .statement .amount { font-family: 'DM Mono', monospace; min-width: 100px; text-align: right; }
+    .amount.positive, .amount.green { color: #27ae60; }
+    .amount.negative, .amount.red   { color: #c0392b; }
+    .gst-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+    .gst-table th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: #9f9fba; background: #f0ede8; border-bottom: 1px solid #e2ddd6; }
+    .gst-table td { padding: 9px 12px; border-bottom: 1px solid #e2ddd6; font-family: 'DM Mono', monospace; }
+    .gst-table tr:last-child td { border-bottom: none; }
+    .gst-kpis { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+    .gst-kpi { background: #f7f5f2; border: 1px solid #e2ddd6; border-radius: 10px; padding: 16px 20px; }
+    .gst-kpi .lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; color: #9f9fba; margin-bottom: 6px; }
+    .gst-kpi .val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
+    .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e2ddd6; font-size: 10px; color: #9f9fba; display: flex; justify-content: space-between; }
+    @media print {
+      body { padding: 0; }
+      .report-page { padding: 36px 44px; }
+      .print-btn { display: none; }
+    }
+    .print-btn {
+      position: fixed; top: 20px; right: 20px;
+      background: #1a1a2e; color: #fff; border: none;
+      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; font-family: 'DM Sans', sans-serif;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+    }
+    .print-btn:hover { background: #2d2d4e; }
+  </style>
+</head>
+<body>
+
+<button class="print-btn" onclick="window.print()">⬇ Save as PDF</button>
+
+<!-- ── INCOME STATEMENT ── -->
+<div class="report-page">
+  <div class="report-header">
+    <div class="report-header-left">
+      <div class="entity">${entity}</div>
+      <div class="subtitle">Income Statement — Year ending 30 June ${fyVal}</div>
+    </div>
+    <div class="report-header-right">
+      Generated ${today}<br>
+      All figures in AUD (excl. GST)
+    </div>
+  </div>
+  <div class="statement">${isHtml}</div>
+  <div class="footer"><span>${entity} · Confidential</span><span>Income Statement · FY${fyVal}</span></div>
+</div>
+
+<!-- ── BALANCE SHEET ── -->
+<div class="report-page">
+  <div class="report-header">
+    <div class="report-header-left">
+      <div class="entity">${entity}</div>
+      <div class="subtitle">Balance Sheet — As at ${today}</div>
+    </div>
+    <div class="report-header-right">
+      Generated ${today}<br>
+      All figures
+      All figures in AUD
+    </div>
+  </div>
+  <div class="statement">${bsHtml}</div>
+  <div class="footer"><span>${entity} · Confidential</span><span>Balance Sheet · As at ${today}</span></div>
+</div>
+
+<!-- ── GST SUMMARY ── -->
+<div class="report-page">
+  <div class="report-header">
+    <div class="report-header-left">
+      <div class="entity">${entity}</div>
+      <div class="subtitle">GST Summary — FY${fyVal}</div>
+    </div>
+    <div class="report-header-right">
+      Generated ${today}<br>
+      All figures in AUD
+    </div>
+  </div>
+
+  <div class="gst-kpis">
+    <div class="gst-kpi"><div class="lbl">GST Collected</div><div class="val" style="color:#27ae60">${fmt(gstC)}</div></div>
+    <div class="gst-kpi"><div class="lbl">GST Paid (Input Credits)</div><div class="val" style="color:#c0392b">${fmt(gstP)}</div></div>
+    <div class="gst-kpi"><div class="lbl">Net GST Payable / (Refund)</div><div class="val" style="color:${gstNet>=0?'#c0392b':'#27ae60'}">${fmt(gstNet)}</div></div>
+  </div>
+
+  <div class="report-title">BAS Summary — Quarterly</div>
+  <table class="gst-table">
+    <thead><tr><th>Quarter</th><th>GST Collected</th><th>GST Paid</th><th>Net Payable / (Refund)</th></tr></thead>
+    <tbody>
+      ${gstRows}
+      <tr style="font-weight:700;background:#f0ede8;">
+        <td style="font-family:'DM Sans',sans-serif;">Total</td>
+        <td style="color:#27ae60">${fmt(gstC)}</td>
+        <td style="color:#c0392b">${fmt(gstP)}</td>
+        <td style="color:${gstNet>=0?'#c0392b':'#27ae60'}">${fmt(gstNet)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="footer"><span>${entity} · Confidential</span><span>GST Summary · FY${fyVal}</span></div>
+</div>
+
+</body>
+</html>`);
+  win.document.close();
+}
+
+function exportExcel() {
+  const wb = XLSX.utils.book_new();
+
+  // Transactions sheet
+  const txData = [['Date','Reference','Description','Type','Category','Amount (AUD)','Excl. GST','GST','Method']];
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      txData.push([t.date, t.ref, t.desc, 'Journal', 'Multiple', t.amount, '', '', 'Journal']);
+      t.debits.forEach(d => txData.push(['', '', `  DR: ${d.account} ${getAccount(d.account)?.name || ''}`, '', '', d.amount, '', '', '']));
+      t.credits.forEach(c => txData.push(['', '', `  CR: ${c.account} ${getAccount(c.account)?.name || ''}`, '', '', c.amount, '', '', '']));
+    } else {
+      txData.push([t.date, t.ref || 'TX-'+t.id.slice(0,4), t.desc, t.type, t.category || '', t.amount, exGST(t), gstAmount(t), t.method]);
+    }
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(txData), 'Transactions');
+
+  // Journals sheet
+  const journalData = [['Date','Reference','Narration','Account','Debit','Credit']];
+  journals.forEach(j => {
+    j.lines.forEach((line, idx) => {
+      journalData.push([
+        idx === 0 ? j.date : '',
+        idx === 0 ? j.ref : '',
+        idx === 0 ? j.narration : '',
+        `${line.accountId} ${line.accountName}`,
+        line.debit || '',
+        line.credit || ''
+      ]);
+    });
+    journalData.push(['', '', '', 'TOTAL', j.total, j.total]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(journalData), 'Journals');
+
+  // Ledger sheet
+  const ledgerData = [['Account Code','Account Name','Type','Balance DR','Balance CR']];
+  ALL_ACCOUNTS.forEach(acc => {
+    const bal = calculateAccountBalance(acc.id);
+    const isContra = acc.contra || (acc.type === 'liability') || (acc.type === 'revenue') || (acc.type === 'equity' && acc.id !== '3020');
+    const displayBal = isContra ? -bal : bal;
+    ledgerData.push([
+      acc.id,
+      acc.name,
+      acc.type,
+      displayBal > 0 ? displayBal : '',
+      displayBal < 0 ? Math.abs(displayBal) : ''
+    ]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ledgerData), 'Chart of Accounts');
+
+  // Income Statement
+  const t = totals();
+  const incCats = groupByCategory('income');
+  const expCats = groupByCategory('expense');
+  const isData = [
+    ['INCOME STATEMENT'],
+    ['Period ending 30 June 2026'],
+    [],
+    ['REVENUE'],
+    ...Object.entries(incCats).map(([c,v]) => ['  ' + c, '', v]),
+    ['TOTAL REVENUE', '', t.income],
+    [],
+    ['EXPENSES'],
+    ...Object.entries(expCats).map(([c,v]) => ['  ' + c, '', v]),
+    ['TOTAL EXPENSES', '', t.expenses],
+    [],
+    ['NET PROFIT / (LOSS)', '', t.income - t.expenses],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(isData), 'Income Statement');
+
+  // Balance Sheet
+  const bank = t.capital - t.expenses - t.drawings + t.income;
+  const ppeTotal = assets.filter(a=>a.type==='ppe').reduce((s,a)=>s+a.value,0);
+  const bsData = [
+    ['BALANCE SHEET'],
+    [`As at ${new Date().toLocaleDateString('en-AU')}`],
+    [],
+    ["OWNER'S EQUITY"],
+    ['  Capital', '', t.capital],
+    ['  Drawings', '', -t.drawings],
+    ['  Net Profit / (Loss)', '', t.netProfit],
+    ['NET EQUITY', '', t.capital - t.drawings + t.netProfit],
+    [],
+    ['ASSETS'],
+    ['  Bank / Cash', '', bank],
+    ...assets.map(a => ['  ' + a.name, '', a.value]),
+    ['TOTAL ASSETS', '', bank + ppeTotal],
+    [],
+    ['LIABILITIES'],
+    ['  Accrued Expenses', '', ppeTotal],
+    ['TOTAL LIABILITIES', '', ppeTotal],
+    [],
+    ['NET ASSETS', '', bank],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(bsData), 'Balance Sheet');
+
+  // GST
+  const gstC = transactions.filter(t=>t.type==='income'&&t.gst==='yes').reduce((s,t)=>s+gstAmount(t),0);
+  const gstP = transactions.filter(t=>t.type==='expense'&&t.gst==='yes').reduce((s,t)=>s+gstAmount(t),0);
+  const gstData = [
+    ['GST SUMMARY'],
+    [],
+    ['GST Collected (Output Tax)', '', gstC],
+    ['GST Paid (Input Tax Credits)', '', gstP],
+    ['Net GST Payable / (Refund)', '', gstC - gstP],
+    [],
+    ['GST Control Account'],
+    ['GST Payable (2020)', '', gstC],
+    ['GST Receivable (1030)', '', gstP],
+    ['Net Position', '', gstC - gstP],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gstData), 'GST');
+
+  XLSX.writeFile(wb, 'Tayla_Finance.xlsx');
+  toast('Excel exported ✓');
+}
+
+function calculateAccountBalance(accountId) {
+  let balance = 0;
+  
+  transactions.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      t.debits.forEach(d => { if (d.account === accountId) balance += d.amount; });
+      t.credits.forEach(c => { if (c.account === accountId) balance -= c.amount; });
+    }
+  });
+  
+  journals.forEach(j => {
+    j.lines.forEach(line => {
+      if (line.accountId === accountId) {
+        balance += line.debit - line.credit;
+      }
+    });
+  });
+  
+  return balance;
+}
+
+// ══════════════════════════════════════════════════════
+//  TAX
+// ══════════════════════════════════════════════════════
+
+const TAX_BRACKETS_INDIVIDUAL = {
+  2026: [
+    { min: 0,       max: 18200,   rate: 0,    base: 0 },
+    { min: 18200,   max: 45000,   rate: 0.16, base: 0 },
+    { min: 45000,   max: 135000,  rate: 0.30, base: 4288 },
+    { min: 135000,  max: 190000,  rate: 0.37, base: 31288 },
+    { min: 190000,  max: Infinity,rate: 0.45, base: 51638 },
+  ],
+  2025: [
+    { min: 0,       max: 18200,   rate: 0,    base: 0 },
+    { min: 18200,   max: 45000,   rate: 0.16, base: 0 },
+    { min: 45000,   max: 135000,  rate: 0.30, base: 4288 },
+    { min: 135000,  max: 190000,  rate: 0.37, base: 31288 },
+    { min: 190000,  max: Infinity,rate: 0.45, base: 51638 },
+  ]
+};
+
+const LMITO_LITO = {
+  lito: (income) => {
+    if (income <= 37500) return 700;
+    if (income <= 45000) return 700 - (income - 37500) * 0.05;
+    if (income <= 66667) return 325 - (income - 45000) * 0.015;
+    return 0;
+  }
+};
+
+function calcIndividualTax(taxableIncome, fy, medicareExemption) {
+  const brackets = TAX_BRACKETS_INDIVIDUAL[fy] || TAX_BRACKETS_INDIVIDUAL[2026];
+  let tax = 0;
+  for (const b of brackets) {
+    if (taxableIncome <= b.min) break;
+    const slice = Math.min(taxableIncome, b.max) - b.min;
+    tax += slice * b.rate;
+  }
+
+  const lito = LMITO_LITO.lito(taxableIncome);
+  const taxAfterLITO = Math.max(0, tax - lito);
+
+  let medicare = 0;
+  const medicareRate = medicareExemption === 'full' ? 0 : medicareExemption === 'half' ? 0.01 : 0.02;
+  const shadeInThreshold = 26000;
+  const fullLevyThreshold = 32500;
+  if (medicareRate > 0) {
+    if (taxableIncome > fullLevyThreshold) {
+      medicare = taxableIncome * medicareRate;
+    } else if (taxableIncome > shadeInThreshold) {
+      medicare = (taxableIncome - shadeInThreshold) * 0.1 * (medicareRate / 0.02);
+    }
+  }
+
+  return { incomeTax: Math.round(taxAfterLITO), medicare: Math.round(medicare), lito: Math.round(lito), grossTax: Math.round(tax) };
+}
+
+function calcCompanyTax(taxableIncome, baseRateEntity) {
+  const rate = baseRateEntity === 'yes' ? 0.25 : 0.30;
+  const tax = Math.max(0, taxableIncome * rate);
+  return { incomeTax: Math.round(tax), rate };
+}
+
+function renderTax() {
+  const entity     = document.getElementById('tax-entity')?.value || 'sole_trader';
+  const fy         = parseInt(document.getElementById('tax-fy')?.value || '2026');
+  const medicare   = document.getElementById('tax-medicare')?.value || 'no';
+  const baseRate   = document.getElementById('tax-base-rate')?.value || 'yes';
+
+  document.getElementById('tax-medicare').closest('.form-group').style.display = entity === 'sole_trader' ? '' : 'none';
+  document.getElementById('tax-base-rate').closest('.form-group').style.display = entity === 'company' ? '' : 'none';
+
+  const fyStart = new Date(`${fy-1}-07-01`);
+  const fyEnd   = new Date(`${fy}-06-30`);
+  const fyTxns  = transactions.filter(t => { const d = new Date(t.date); return d >= fyStart && d <= fyEnd; });
+  let income = 0, expenses = 0;
+  for (const t of fyTxns) {
+    if (t.type === 'income') income += t.amount;
+    if (t.type === 'expense') expenses += t.amount;
+  }
+  const netProfit = income - expenses;
+  const taxableIncome = Math.max(0, netProfit);
+
+  let incomeTax, medicareLevy = 0, lito = 0, effectiveRate, totalTax;
+
+  if (entity === 'sole_trader') {
+    const res = calcIndividualTax(taxableIncome, fy, medicare);
+    incomeTax    = res.incomeTax;
+    medicareLevy = res.medicare;
+    lito         = res.lito;
+    const grossTax = res.grossTax;
+    totalTax     = incomeTax + medicareLevy;
+    effectiveRate = taxableIncome > 0 ? (totalTax / taxableIncome * 100).toFixed(1) : '0.0';
+
+    const brackets = TAX_BRACKETS_INDIVIDUAL[fy] || TAX_BRACKETS_INDIVIDUAL[2026];
+    document.getElementById('tax-bracket-subtitle').textContent = '  —  Individual / Sole Trader FY' + fy;
+    document.getElementById('tax-bracket-tbody').innerHTML = brackets.map(b => {
+      const isActive = taxableIncome > b.min;
+      const label = b.max === Infinity ? `Over $${b.min.toLocaleString()}` : `$${b.min.toLocaleString()} – $${b.max.toLocaleString()}`;
+      return `<tr style="${isActive ? 'background:rgba(232,197,71,0.08);' : ''}">
+        <td>${label} ${isActive && taxableIncome <= b.max ? '<span style="font-size:10px;background:var(--accent2);color:var(--accent);padding:1px 6px;border-radius:99px;font-weight:700;">YOUR BRACKET</span>' : ''}</td>
+        <td class="mono">${(b.rate*100).toFixed(0)}%</td>
+        <td class="mono">${b.max === Infinity || taxableIncome > b.min ? fmt(Math.max(0, Math.min(taxableIncome, b.max === Infinity ? taxableIncome : b.max) - b.min) * b.rate) : '—'}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('tax-calc-body').innerHTML = `
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'DM Serif Display',serif;font-size:20px;">Tax Estimate — FY${fy}</div>
+        <div style="font-size:12px;color:var(--text3);">Sole Trader / Individual — ATO rates</div>
+      </div>
+      <div class="section-title">Income</div>
+      <div class="statement row"><span>Total Revenue</span><span class="amount positive">${fmt(income)}</span></div>
+      <div class="statement row"><span>Less: Expenses</span><span class="amount negative">(${fmt(expenses)})</span></div>
+      <div class="statement row total"><span>Taxable Income</span><span class="amount">${fmt(taxableIncome)}</span></div>
+
+      <div class="section-title" style="margin-top:16px;">Tax Calculation</div>
+      <div class="statement row"><span>Gross Income Tax</span><span class="amount negative">${fmt(grossTax)}</span></div>
+      <div class="statement row"><span>Less: LITO Offset</span><span class="amount positive">${fmt(lito)}</span></div>
+      <div class="statement row"><span>Net Income Tax</span><span class="amount negative">${fmt(incomeTax)}</span></div>
+      <div class="statement row"><span>Medicare Levy (${medicare === 'full' ? '0%' : medicare === 'half' ? '1%' : '2%'})</span><span class="amount negative">${fmt(medicareLevy)}</span></div>
+      <div class="statement row total"><span>Total Tax Payable</span><span class="amount negative">${fmt(totalTax)}</span></div>
+
+      <div class="statement row grand-total" style="margin-top:12px;">
+        <span>After-Tax Profit</span>
+        <span class="amount ${netProfit - totalTax >= 0 ? 'positive' : 'negative'}">${fmt(Math.max(0, netProfit) - totalTax)}</span>
+      </div>
+
+      <div style="margin-top:20px;padding:14px;background:var(--surface2);border-radius:8px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Effective Tax Rate</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;">${effectiveRate}%</div></div>
+        <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Marginal Rate</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;">${getMarginalRate(taxableIncome, brackets)}%</div></div>
+      </div>
+    `;
+
+    document.getElementById('tax-notes').innerHTML = `
+      <strong>Sole Trader tax in Australia:</strong> Your business income is taxed at individual income tax rates. You must lodge a personal tax return (not a company return). You pay tax on net profit after deducting all business expenses. The Low Income Tax Offset (LITO) reduces tax for lower incomes. <br><br>
+      <strong>PAYG Instalments:</strong> Once your tax liability exceeds $1,000, the ATO will likely require quarterly PAYG instalments. Plan for this by setting aside ${effectiveRate}% of your revenue each month. <br><br>
+      <strong>This is an estimate only.</strong> Consult a registered tax agent or accountant for your actual tax position. Figures are based on ATO published rates for FY${fy}.
+    `;
+
+  } else {
+    const res = calcCompanyTax(taxableIncome, baseRate);
+    incomeTax = res.incomeTax;
+    totalTax  = incomeTax;
+    effectiveRate = taxableIncome > 0 ? (totalTax / taxableIncome * 100).toFixed(1) : '0.0';
+    const rate = res.rate;
+
+    document.getElementById('tax-bracket-subtitle').textContent = '  —  Company FY' + fy;
+    document.getElementById('tax-bracket-tbody').innerHTML = `
+      <tr style="background:rgba(232,197,71,0.08);">
+        <td>All taxable income <span style="font-size:10px;background:var(--accent2);color:var(--accent);padding:1px 6px;border-radius:99px;font-weight:700;">FLAT RATE</span></td>
+        <td class="mono">${(rate*100).toFixed(0)}%</td>
+        <td class="mono">${fmt(totalTax)}</td>
+      </tr>
+      <tr style="opacity:.5;"><td colspan="3" style="font-size:12px;padding:10px 14px;">Companies pay a flat rate — no progressive brackets.</td></tr>
+    `;
+
+    document.getElementById('tax-calc-body').innerHTML = `
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'DM Serif Display',serif;font-size:20px;">Tax Estimate — FY${fy}</div>
+        <div style="font-size:12px;color:var(--text3);">Company (Pty Ltd) — ATO rates</div>
+      </div>
+      <div class="section-title">Income</div>
+      <div class="statement row"><span>Total Revenue</span><span class="amount positive">${fmt(income)}</span></div>
+      <div class="statement row"><span>Less: Expenses</span><span class="amount negative">(${fmt(expenses)})</span></div>
+      <div class="statement row total"><span>Taxable Income</span><span class="amount">${fmt(taxableIncome)}</span></div>
+
+      <div class="section-title" style="margin-top:16px;">Tax Calculation</div>
+      <div class="statement row"><span>Company Tax @ ${(rate*100).toFixed(0)}%</span><span class="amount negative">${fmt(incomeTax)}</span></div>
+      <div class="statement row total"><span>Total Tax Payable</span><span class="amount negative">${fmt(totalTax)}</span></div>
+
+      <div class="statement row grand-total" style="margin-top:12px;">
+        <span>After-Tax Profit</span>
+        <span class="amount ${netProfit - totalTax >= 0 ? 'positive' : 'negative'}">${fmt(Math.max(0, netProfit) - totalTax)}</span>
+      </div>
+
+      <div style="margin-top:20px;padding:14px;background:var(--surface2);border-radius:8px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Tax Rate Applied</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;">${(rate*100).toFixed(0)}%</div></div>
+        <div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">After-Tax Profit</div><div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:500;">${fmt(Math.max(0, netProfit) - totalTax)}</div></div>
+      </div>
+    `;
+
+    document.getElementById('tax-notes').innerHTML = `
+      <strong>Company tax in Australia:</strong> A Base Rate Entity (BRE) — a company with aggregated turnover under $50M and no more than 80% of assessable income from passive sources — pays 25% tax (FY2026). All other companies pay 30%.<br><br>
+      <strong>Franking Credits:</strong> Tax paid by the company generates franking credits, which can be passed to shareholders as franked dividends, avoiding double taxation on distributed profits.<br><br>
+      <strong>This is an estimate only.</strong> Consult a registered tax agent or accountant for your actual tax position. Figures are based on ATO published rates for FY${fy}.
+    `;
+  }
+
+  document.getElementById('tax-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Taxable Income</div><div class="kpi-value">${fmt(taxableIncome)}</div></div>
+    <div class="kpi"><div class="kpi-label">Tax Payable</div><div class="kpi-value negative">${fmt(totalTax)}</div></div>
+    <div class="kpi"><div class="kpi-label">Effective Rate</div><div class="kpi-value">${effectiveRate}%</div></div>
+    <div class="kpi"><div class="kpi-label">After-Tax Profit</div><div class="kpi-value ${netProfit - totalTax >= 0 ? 'positive' : 'negative'}">${fmt(Math.max(0, netProfit) - totalTax)}</div></div>
+    <div class="kpi"><div class="kpi-label">Monthly Tax Provision</div><div class="kpi-value negative">${fmt(totalTax / 12)}</div></div>
+  `;
+}
+
+function getMarginalRate(income, brackets) {
+  let marginal = 0;
+  for (const b of brackets) {
+    if (income > b.min) marginal = b.rate;
+  }
+  return (marginal * 100).toFixed(0);
+}
+
+// ══════════════════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════════════════
+let appSettings = JSON.parse(localStorage.getItem('appSettings') || JSON.stringify({
+  bizModel: 'saas',
+  bizName: 'Tayla',
+  defaultEntity: 'sole_trader',
+  defaultFY: '2026'
+}));
+
+function saveSettings() {
+  appSettings.bizModel      = document.getElementById('setting-biz-model')?.value || 'saas';
+  appSettings.bizName       = document.getElementById('setting-biz-name')?.value || '';
+  appSettings.defaultEntity = document.getElementById('setting-entity')?.value || 'sole_trader';
+  appSettings.defaultFY     = document.getElementById('setting-fy')?.value || '2026';
+  localStorage.setItem('appSettings', JSON.stringify(appSettings));
+}
+
+function loadSettings() {
+  const s = appSettings;
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  set('setting-biz-model', s.bizModel);
+  set('setting-biz-name',  s.bizName);
+  set('setting-entity',    s.defaultEntity);
+  set('setting-fy',        s.defaultFY);
+  const en = document.getElementById('entity-name');
+  if (en && s.bizName) en.value = s.bizName;
+  onBizModelChange();
+  renderSoftwareSettings();
+  renderSettingsProfilePreview();
+}
+
+function syncEntityName() {
+  const name = document.getElementById('setting-biz-name')?.value || '';
+  const en = document.getElementById('entity-name');
+  if (en) { en.value = name; renderIncomeStatement(); renderBalanceSheet(); }
+}
+
+function onBizModelChange() {
+  const model = document.getElementById('setting-biz-model')?.value || 'saas';
+  ['saas','hospitality','retail','professional'].forEach(m => {
+    const el = document.getElementById('model-detail-' + m);
+    if (el) el.style.display = m === model ? 'block' : 'none';
+  });
+}
+
+function toggleUserMenu() {
+  const dd = document.getElementById('user-dropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+  if (dd.style.display === 'block' && _currentUser) {
+    document.getElementById('user-email-display').textContent = _currentUser.email || '';
+  }
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('user-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const dd = document.getElementById('user-dropdown');
+    if (dd) dd.style.display = 'none';
+  }
+});
+
+function renderSettingsProfilePreview() {
+  const el = document.getElementById('settings-profile-preview');
+  if (!el || !_businessProfile) return;
+  const p = _businessProfile;
+  const bizType = { saas:'💻 SaaS', hospitality:'🍽 Hospitality', retail:'🛍 Retail', professional:'💼 Professional Services' }[p.biz_type] || p.biz_type;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 16px;">
+      <span style="color:var(--text3);font-size:12px;">Type</span><span>${bizType}</span>
+      <span style="color:var(--text3);font-size:12px;">Name</span><span style="font-weight:600;">${p.biz_name || '—'}</span>
+      ${p.abn ? `<span style="color:var(--text3);font-size:12px;">ABN</span><span>${p.abn}</span>` : ''}
+      ${p.address ? `<span style="color:var(--text3);font-size:12px;">Address</span><span>${p.address}${p.state ? ', '+p.state : ''}${p.postcode ? ' '+p.postcode : ''}</span>` : ''}
+      <span style="color:var(--text3);font-size:12px;">Entity</span><span>${({sole_trader:'Sole Trader',company:'Company (Pty Ltd)',partnership:'Partnership',trust:'Trust'})[p.entity_type] || p.entity_type}</span>
+      <span style="color:var(--text3);font-size:12px;">GST</span><span>${p.gst_registered ? '✓ Registered' : 'Not registered'}</span>
+      ${p.gst_registered && p.bas_frequency ? `<span style="color:var(--text3);font-size:12px;">BAS</span><span>${p.bas_frequency.charAt(0).toUpperCase()+p.bas_frequency.slice(1)}</span>` : ''}
+    </div>
+  `;
+}
+
+function applyTaxDefaults() {
+  const entity = document.getElementById('setting-entity')?.value;
+  const fy     = document.getElementById('setting-fy')?.value;
+  if (entity) { const el = document.getElementById('tax-entity'); if (el) el.value = entity; }
+  if (fy)     { const el = document.getElementById('tax-fy');     if (el) el.value = fy; }
+  renderTax();
+  toast('Tax defaults applied ✓');
+}
+
+function confirmClearData() {
+  if (confirm('This will permanently delete ALL transactions, assets and user data. Are you sure?')) {
+    localStorage.clear();
+    location.reload();
+  }
+}
+
+// ── SOFTWARE MANAGEMENT ──
+
+function renderSoftwareSettings() {
+  const el = document.getElementById('software-list-settings');
+  if (!el) return;
+  if (softwareList.length === 0) {
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">No software added yet. Click + Add Software to get started.</div>';
+    return;
+  }
+  el.innerHTML = softwareList.map((sw, si) => {
+    const tierRows = sw.tiers.map((t, ti) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="flex:1;">
+          <input type="text" value="${t.name}" style="border:none;background:transparent;font-size:13px;font-weight:500;width:120px;padding:2px 4px;border-radius:4px;" onchange="renameTier('${sw.id}','${t.id}',this.value)" onblur="renameTier('${sw.id}','${t.id}',this.value)">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:13px;color:var(--text3);">$</span>
+          <input type="number" value="${t.price}" step="0.01" min="0" style="width:72px;border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;background:var(--bg);" onchange="updateTierPrice('${sw.id}','${t.id}',this.value)">
+          <span style="font-size:11px;color:var(--text3);">/mo</span>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="deleteTier('${sw.id}','${t.id}')">✕</button>
+      </div>`).join('');
+
+    const latestFilled = MONTHS.filter(m => swTotalUsers(sw, m.key) > 0);
+    const latestMRR = latestFilled.length ? swMRR(sw, latestFilled[latestFilled.length-1].key) : 0;
+
+    return `
+    <div style="border-bottom:1px solid var(--border);padding:20px 24px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+        <div>
+          <input type="text" value="${sw.name}" style="font-weight:600;font-size:15px;border:none;background:transparent;padding:2px 4px;border-radius:4px;color:var(--text);width:220px;" onblur="renameSoftware('${sw.id}',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${sw.tiers.length} tier${sw.tiers.length!==1?'s':''} · MRR ${fmt(latestMRR)}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="openAddTierModal('${sw.id}')">+ Add Tier</button>
+          ${softwareList.length > 1 ? `<button class="btn btn-danger btn-sm" onclick="deleteSoftware('${sw.id}')">Remove</button>` : ''}
+        </div>
+      </div>
+      <div style="margin-left:0;">
+        ${tierRows || '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No tiers yet — add one above.</div>'}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Modal helpers
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+let addTierSwId = null;
+
+function openAddSoftwareModal() {
+  document.getElementById('new-sw-name').value = '';
+  document.getElementById('add-software-modal').classList.add('show');
+  setTimeout(() => document.getElementById('new-sw-name').focus(), 50);
+}
+
+function saveNewSoftware() {
+  const name = document.getElementById('new-sw-name').value.trim();
+  if (!name) { document.getElementById('new-sw-name').focus(); return; }
+  const newSw = {
+    id: uid(),
+    name,
+    tiers: [],
+    monthlyUsers: Object.fromEntries(MONTHS.map(m => [m.key, { free:0, staff:0 }]))
+  };
+  softwareList.push(newSw);
+  save();
+  renderSoftwareSettings();
+  renderUsersTable();
+  closeModal('add-software-modal');
+  toast(`"${name}" added ✓`);
+}
+
+function deleteSoftware(swId) {
+  if (!confirm('Remove this software and all its user data?')) return;
+  softwareList = softwareList.filter(s => s.id !== swId);
+  save();
+  renderSoftwareSettings();
+  renderUsersTable();
+  renderIncomeStatement();
+  toast('Software removed');
+}
+
+function openAddTierModal(swId) {
+  addTierSwId = swId;
+  const sw = softwareList.find(s => s.id === swId);
+  document.getElementById('add-tier-sw-name').textContent = sw?.name || '';
+  document.getElementById('new-tier-name').value = '';
+  document.getElementById('new-tier-price').value = '';
+  document.getElementById('add-tier-modal').classList.add('show');
+  setTimeout(() => document.getElementById('new-tier-name').focus(), 50);
+}
+
+function saveNewTier() {
+  const name  = document.getElementById('new-tier-name').value.trim();
+  const price = parseFloat(document.getElementById('new-tier-price').value);
+  if (!name || isNaN(price)) { toast('Please enter a name and price.'); return; }
+  const sw = softwareList.find(s => s.id === addTierSwId);
+  if (!sw) return;
+  const tierId = 't' + uid();
+  sw.tiers.push({ id: tierId, name, price });
+  MONTHS.forEach(m => { sw.monthlyUsers[m.key] = sw.monthlyUsers[m.key] || {}; sw.monthlyUsers[m.key][tierId] = 0; });
+  save();
+  renderSoftwareSettings();
+  renderUsersTable();
+  closeModal('add-tier-modal');
+  toast(`"${name}" tier added ✓`);
+}
+
+function deleteTier(swId, tierId) {
+  if (!confirm('Remove this tier?')) return;
+  const sw = softwareList.find(s => s.id === swId);
+  if (!sw) return;
+  sw.tiers = sw.tiers.filter(t => t.id !== tierId);
+  save();
+  renderSoftwareSettings();
+  renderUsersTable();
+  toast('Tier removed');
+}
+
+function renameSoftware(swId, newName) {
+  const sw = softwareList.find(s => s.id === swId);
+  if (!sw || !newName.trim()) return;
+  sw.name = newName.trim();
+  save();
+  renderSoftwareSettings();
+  renderUsersTable();
+  renderIncomeStatement();
+  toast(`Renamed to "${sw.name}" ✓`);
+}
+
+function renameTier(swId, tierId, newName) {
+  const sw = softwareList.find(s => s.id === swId);
+  if (!sw) return;
+  const t = sw.tiers.find(t => t.id === tierId);
+  if (t && newName.trim()) { t.name = newName.trim(); save(); renderUsersTable(); }
+}
+
+function updateTierPrice(swId, tierId, newPrice) {
+  const sw = softwareList.find(s => s.id === swId);
+  if (!sw) return;
+  const t = sw.tiers.find(t => t.id === tierId);
+  if (t) { t.price = parseFloat(newPrice)||0; save(); renderUsersTable(); renderIncomeStatement(); }
+}
+
+// ── SOFTWARE INCOME → IS ──
+function getSoftwareIncomeLines(fyStart, fyEnd) {
+  const lines = {};
+  softwareList.forEach(sw => {
+    sw.tiers.forEach(t => {
+      let total = 0;
+      MONTHS.forEach(m => {
+        const mDate = new Date(m.label.replace(' ', ' 1 '));
+        if (mDate >= fyStart && mDate <= fyEnd) {
+          const mu = sw.monthlyUsers[m.key] || {};
+          total += (parseInt(mu[t.id])||0) * t.price;
+        }
+      });
+      if (total > 0) {
+        const key = `${sw.name} — ${t.name}`;
+        lines[key] = (lines[key] || 0) + total;
+      }
+    });
+  });
+  return lines;
+}
+
+function fmt(n) {
+  if (n === 0) return '$0.00';
+  const abs = Math.abs(n);
+  const str = '$' + abs.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return n < 0 ? `(${str})` : str;
+}
+function fmtAmt(n) { return fmt(n); }
+function fmtDate(d) { if (!d) return ''; const [y,m,dy] = d.split('-'); return `${dy}/${m}/${y}`; }
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  // Set today's date
+  document.getElementById('tx-date').valueAsDate = new Date();
+  document.getElementById('journal-date').valueAsDate = new Date();
+  
+  // Initialize account dropdowns
+  initTxLines();
+  
+  // Initialize journal lines
+  initJournalLines();
+  
+  updateCategoryOptions();
+  updateEditCats();
+  loadSettings();
+
+  renderAll();
+});
+
+// Auto-suggest category on description input
+document.addEventListener('DOMContentLoaded', () => {
+  const txDesc = document.getElementById('tx-desc');
+  if (txDesc) {
+    txDesc.addEventListener('input', function() {
+      // Auto-suggest logic removed for double-entry mode
+    });
+  }
+});
+
+function filterBySoftware(list) {
+  if (activeSoftware === 'combined') return list;
+  return list.filter(item => item.software === activeSoftware);
+}
+
+function setActiveSoftware(id) {
+  activeSoftware = id;
+  renderAll();
+}
+
