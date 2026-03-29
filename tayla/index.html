@@ -324,6 +324,8 @@
   </div>
   <div class="tab" onclick="showPage('reconcile-page')">⇄ Reconcile</div>
   <div class="tab" onclick="showPage('invoices-page')">🧾 Invoices</div>
+  <div class="tab" onclick="showPage('bills-page')">📥 Bills</div>
+  <div class="tab" onclick="showPage('assets-page')">🏗 Assets</div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
@@ -1412,6 +1414,365 @@
   </div>
 </div>
 
+<!-- ══════════════════ BILLS ══════════════════ -->
+<div id="bills-page" class="page">
+
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
+    <button class="bill-tab active" onclick="showBillTab('list')"   id="btab-list"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">📥 Bills</button>
+    <button class="bill-tab"        onclick="showBillTab('editor')" id="btab-editor" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">✏ New Bill</button>
+  </div>
+
+  <!-- List -->
+  <div id="bill-list">
+    <div class="kpi-grid" id="bill-kpis" style="margin-bottom:24px;"></div>
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Bills</span>
+        <div class="flex-gap">
+          <input type="text" id="bill-search" placeholder="Search…" style="width:180px;" oninput="renderBillList()">
+          <select id="bill-filter-status" onchange="renderBillList()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
+            <option value="">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="received">Received</option>
+            <option value="approved">Approved</option>
+            <option value="paid">Paid</option>
+            <option value="overdue">Overdue</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="newBill()">+ New Bill</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Bill #</th><th>Supplier</th><th>Bill Date</th><th>Due Date</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="bill-tbody"></tbody>
+          </table>
+        </div>
+        <div id="bill-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:12px;">📥</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text2);">No bills yet</div>
+          <button class="btn btn-primary mt" onclick="newBill()">+ Add Bill</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editor -->
+  <div id="bill-editor" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:24px;" class="responsive-2col">
+      <div>
+        <div class="card">
+          <div class="card-header flex-between">
+            <span class="card-title" id="bill-editor-title">New Bill</span>
+            <div class="flex-gap">
+              <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="saveBillAs('draft')">Save Draft</button>
+              <button class="btn btn-primary btn-sm" onclick="saveBillAs('received')">Save as Received</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <input type="hidden" id="bill-edit-id">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+              <div class="form-group">
+                <label>Bill Number / Ref</label>
+                <input type="text" id="bill-number" placeholder="e.g. BILL-001 or supplier ref">
+              </div>
+              <div class="form-group">
+                <label>Status</label>
+                <select id="bill-status">
+                  <option value="draft">Draft</option>
+                  <option value="received">Received</option>
+                  <option value="approved">Approved</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Bill Date</label>
+                <input type="date" id="bill-date">
+              </div>
+              <div class="form-group">
+                <label>Due Date</label>
+                <input type="date" id="bill-due-date">
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+              <label>Supplier</label>
+              <div style="display:flex;gap:8px;">
+                <select id="bill-contact" style="flex:1;">
+                  <option value="">Select supplier…</option>
+                </select>
+                <button class="btn btn-ghost btn-sm" style="color:var(--text);white-space:nowrap;" onclick="showPage('invoices-page');showInvTab('contacts')">+ Add Supplier</button>
+              </div>
+            </div>
+            <!-- Line items -->
+            <div style="margin-bottom:16px;">
+              <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);display:block;margin-bottom:10px;">Line Items</label>
+              <div style="display:grid;grid-template-columns:2fr 80px 110px 80px 110px 36px;gap:8px;margin-bottom:6px;">
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Description</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Qty</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Price</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">GST</span>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Total</span>
+                <span></span>
+              </div>
+              <div id="bill-lines"></div>
+              <button class="btn btn-ghost btn-sm mt" onclick="addBillLine()" style="width:100%;border:1.5px dashed var(--border);">+ Add Line</button>
+            </div>
+            <div class="form-group">
+              <label>Notes</label>
+              <textarea id="bill-notes" placeholder="Payment instructions, remittance details…" style="min-height:70px;"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Summary -->
+      <div>
+        <div class="card" style="position:sticky;top:136px;">
+          <div class="card-header"><span class="card-title">Summary</span></div>
+          <div class="card-body">
+            <div id="bill-summary" style="font-size:13px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MARK BILL PAID MODAL -->
+<div class="modal-overlay" id="mark-bill-paid-modal">
+  <div class="modal" style="width:520px;">
+    <h3>Mark Bill as Paid</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:20px;">A payment transaction will be created in your ledger.</p>
+    <input type="hidden" id="bill-paid-id">
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Payment Date</label>
+          <input type="date" id="bill-paid-date">
+        </div>
+        <div class="form-group">
+          <label>Amount Paid ($)</label>
+          <input type="number" id="bill-paid-amount" step="0.01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Debit Account (expense)</label>
+        <select id="bill-paid-debit">
+          <option value="5010">5010 Marketing & Advertising</option>
+          <option value="5020">5020 Software Subscriptions</option>
+          <option value="5030">5030 Hosting & Infrastructure</option>
+          <option value="5040">5040 Salaries & Wages</option>
+          <option value="5050">5050 Rent</option>
+          <option value="5070">5070 Bank Charges</option>
+          <option value="5110">5110 Professional Fees</option>
+          <option value="2010">2010 Accounts Payable</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Credit Account (payment from)</label>
+        <select id="bill-paid-credit">
+          <option value="1010">1010 Cash at Bank</option>
+          <option value="2010">2010 Accounts Payable</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Reference</label>
+        <input type="text" id="bill-paid-ref">
+      </div>
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="bill-paid-desc">
+      </div>
+    </div>
+    <div class="flex-gap" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('mark-bill-paid-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmBillPaid()">✓ Mark Paid & Save Transaction</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ ASSETS ══════════════════ -->
+<div id="assets-page" class="page">
+
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
+    <button class="asset-tab active" onclick="showAssetTab('register')"    id="atab-register"    style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🏗 Register</button>
+    <button class="asset-tab"        onclick="showAssetTab('depreciation')" id="atab-depreciation" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">📉 Depreciation</button>
+    <button class="asset-tab"        onclick="showAssetTab('add')"          id="atab-add"          style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">+ Add Asset</button>
+  </div>
+
+  <!-- Register -->
+  <div id="asset-register">
+    <div class="kpi-grid" id="asset-kpis" style="margin-bottom:24px;"></div>
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Fixed Asset Register</span>
+        <button class="btn btn-primary btn-sm" onclick="showAssetTab('add')">+ Add Asset</button>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Asset</th><th>Category</th><th>Purchase Date</th><th>Cost</th><th>Method</th><th>Acc. Depreciation</th><th>Book Value</th><th>Actions</th></tr></thead>
+            <tbody id="asset-register-tbody"></tbody>
+          </table>
+        </div>
+        <div id="asset-register-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:12px;">🏗</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text2);">No assets registered yet</div>
+          <button class="btn btn-primary mt" onclick="showAssetTab('add')">+ Add First Asset</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Depreciation Schedule -->
+  <div id="asset-depreciation" style="display:none;">
+    <div class="card section-gap">
+      <div class="card-header flex-between">
+        <span class="card-title">Depreciation Schedule</span>
+        <div class="flex-gap">
+          <select id="depr-fy" onchange="renderDepreciationSchedule()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
+            <option value="2026">FY2026</option>
+            <option value="2025">FY2025</option>
+            <option value="2027">FY2027</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="postDepreciationJournals()">Post Depreciation Journals</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Asset</th><th>Method</th><th>Opening Book Value</th><th>Depreciation</th><th>Closing Book Value</th><th>Acc. Depreciation</th></tr></thead>
+            <tbody id="depr-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card-body" style="border-top:1px solid var(--border);">
+        <div id="depr-total" style="font-size:13px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add / Edit Asset -->
+  <div id="asset-add" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="responsive-2col">
+      <div class="card">
+        <div class="card-header"><span class="card-title" id="asset-form-title">Add Asset</span></div>
+        <div class="card-body">
+          <input type="hidden" id="asset-edit-id">
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="form-group">
+              <label>Asset Name <span style="color:var(--danger);">*</span></label>
+              <input type="text" id="fa-name" placeholder="e.g. MacBook Pro, Company Vehicle">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Category</label>
+                <select id="fa-category">
+                  <option value="ppe">Plant & Equipment</option>
+                  <option value="vehicle">Vehicle</option>
+                  <option value="computer">Computer / IT</option>
+                  <option value="furniture">Furniture & Fittings</option>
+                  <option value="intangible">Intangible Asset</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Ledger Account</label>
+                <select id="fa-account">
+                  <option value="1500">1500 Plant & Equipment</option>
+                  <option value="1600">1600 Intangible Assets</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Purchase Date</label>
+                <input type="date" id="fa-purchase-date">
+              </div>
+              <div class="form-group">
+                <label>Purchase Price ($) <span style="color:var(--danger);">*</span></label>
+                <input type="number" id="fa-cost" step="0.01" min="0" placeholder="0.00" oninput="renderAssetFormPreview()">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Depreciation Method</label>
+                <select id="fa-method" onchange="renderAssetFormPreview()">
+                  <option value="sl">Straight-Line (SL)</option>
+                  <option value="dv">Diminishing Value (DV)</option>
+                  <option value="none">No Depreciation</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Useful Life (years)</label>
+                <input type="number" id="fa-life" min="1" max="40" value="5" oninput="renderAssetFormPreview()">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Salvage Value ($)</label>
+                <input type="number" id="fa-salvage" step="0.01" min="0" value="0" placeholder="0.00" oninput="renderAssetFormPreview()">
+              </div>
+              <div class="form-group">
+                <label>DV Rate (%) <span style="font-size:11px;color:var(--text3);">DV only</span></label>
+                <input type="number" id="fa-dv-rate" step="0.5" min="1" max="100" value="20" oninput="renderAssetFormPreview()">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Description / Notes</label>
+              <input type="text" id="fa-notes" placeholder="Serial number, location, etc.">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button class="btn btn-primary" style="flex:1;" onclick="saveFixedAsset()">Save Asset</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--text);display:none;" id="asset-cancel-btn" onclick="cancelAssetEdit()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview card -->
+      <div class="card" style="position:sticky;top:136px;">
+        <div class="card-header"><span class="card-title">Depreciation Preview</span></div>
+        <div class="card-body">
+          <div id="asset-form-preview" style="font-size:13px;color:var(--text3);">Fill in the form to see a depreciation preview.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ASSET DISPOSAL MODAL -->
+<div class="modal-overlay" id="asset-disposal-modal">
+  <div class="modal">
+    <h3>Dispose / Write-Off Asset</h3>
+    <input type="hidden" id="disposal-asset-id">
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-group">
+          <label>Disposal Date</label>
+          <input type="date" id="disposal-date">
+        </div>
+        <div class="form-group">
+          <label>Sale Proceeds ($)</label>
+          <input type="number" id="disposal-proceeds" step="0.01" min="0" value="0" placeholder="0 if write-off">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Disposal Method</label>
+        <select id="disposal-method">
+          <option value="sale">Sale</option>
+          <option value="writeoff">Write-Off / Scrapped</option>
+          <option value="trade">Trade-In</option>
+        </select>
+      </div>
+      <div id="disposal-summary" style="padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:13px;"></div>
+    </div>
+    <div class="flex-gap" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('asset-disposal-modal')">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="confirmDisposal()">Dispose Asset & Post Journal</button>
+    </div>
+  </div>
+</div>
+
 </main><!-- /main -->
 
 <!-- ADD SOFTWARE MODAL -->
@@ -1593,6 +1954,8 @@
 <script src="db.js"></script>
 <script src="reconcile.js"></script>
 <script src="invoices.js"></script>
+<script src="bills.js"></script>
+<script src="assets.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
