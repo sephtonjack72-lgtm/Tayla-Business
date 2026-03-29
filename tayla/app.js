@@ -881,14 +881,14 @@ function updateGstPreview() {
     const gross    = +(totalNet + gst).toFixed(2);
     injectGstLine('debit', { account: '1030', amount: gst });
     preview.style.display = 'block';
-    preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your credit (bank/payment).`;
+    preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your credit (bank/payment). <span style="color:var(--text3);">GST amount is editable if rounding differs.</span>`;
   } else if (isGstCredit) {
     const totalNet = rawCredits.reduce((s, c) => { const a = getAccount(c.account); return a?.type === 'revenue' ? s + c.amount : s; }, 0);
     const gst      = +(totalNet / 9).toFixed(2);
     const gross    = +(totalNet + gst).toFixed(2);
     injectGstLine('credit', { account: '2020', amount: gst });
     preview.style.display = 'block';
-    preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your debit (bank/receipt).`;
+    preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your debit (bank/receipt). <span style="color:var(--text3);">GST amount is editable if rounding differs.</span>`;
   }
 
   preview.style.display = 'block';
