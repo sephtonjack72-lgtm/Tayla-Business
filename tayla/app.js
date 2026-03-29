@@ -60,6 +60,9 @@ async function afterLogin() {
 }
 
 function applyProfileToApp(profile) {
+  // Set business context for db layer
+  setBusinessId(profile.id);
+
   // Sync business name into app settings
   if (profile.biz_name) {
     appSettings.bizName = profile.biz_name;
@@ -72,11 +75,25 @@ function applyProfileToApp(profile) {
     const bm = document.getElementById('setting-biz-model');
     if (bm) { bm.value = profile.biz_type || 'saas'; onBizModelChange(); }
   }
+
   // Show user email in header
   const userBtn = document.getElementById('header-user-btn');
   if (userBtn && _currentUser) userBtn.textContent = '👤 ' + (_currentUser.email?.split('@')[0] || 'Account');
+
   // Render settings profile card
   renderSettingsProfilePreview();
+
+  // Migrate localStorage → Supabase if needed, then load all data
+  dbMigrateFromLocalStorage().then(() => {
+    dbLoadAll().then(data => {
+      transactions = data.transactions;
+      journals     = data.journals;
+      assets       = data.assets;
+      liabilities  = data.liabilities;
+      softwareList = data.softwareList;
+      renderAll();
+    });
+  });
 }
 
 function hideAllOverlays() {
@@ -554,10 +571,11 @@ function autoCategory(desc, type) {
   return allCats(type)[0];
 }
 
-let transactions = JSON.parse(localStorage.getItem('txns') || '[]');
-let journals = JSON.parse(localStorage.getItem('journals') || '[]');
-let assets = JSON.parse(localStorage.getItem('assets') || '[]');
-let liabilities = JSON.parse(localStorage.getItem('liabilities') || JSON.stringify([]));
+// State — populated by dbLoadAll() after login
+let transactions = [];
+let journals     = [];
+let assets       = [];
+let liabilities  = [];
 const MONTHS = [
   { key: 'JUL', label: 'Jul 2025', fy: 'Q1' },
   { key: 'AUG', label: 'Aug 2025', fy: 'Q1' },
@@ -572,23 +590,8 @@ const MONTHS = [
   { key: 'MAY', label: 'May 2026', fy: 'Q4' },
   { key: 'JUN', label: 'Jun 2026', fy: 'Q4' },
 ];
-// Software portfolio — each item: {id, name, tiers:[{id,name,price}], monthlyUsers:{MON:{tid:count,free:n,staff:n}}}
-let softwareList = JSON.parse(localStorage.getItem('softwareList') || JSON.stringify([
-  {
-    id: 'sw1',
-    name: 'Tayla',
-    tiers: [
-      { id: 't1', name: 'Plus', price: 3.99 },
-      { id: 't2', name: 'Pro',  price: 12.99 }
-    ],
-    monthlyUsers: Object.fromEntries(MONTHS.map(m => [m.key,
-      (m.key==='JAN'||m.key==='FEB'||m.key==='MAR') ? { free:2, t1:0, t2:0, staff:1 } : { free:0, t1:0, t2:0, staff:0 }
-    ]))
-  }
-]));
-
-// Legacy shim — keep save() compatible
-let monthlyUsers = {};
+// Software portfolio — populated by dbLoadAll()
+let softwareList = [];
 
 
 
@@ -598,11 +601,14 @@ let txDebitLines = 1;
 let txCreditLines = 1;
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
+// save() — legacy sync cache write, used throughout the app.
+// Individual db* functions handle Supabase writes for targeted operations.
+// For bulk state changes (e.g. after full reload), call dbSaveSoftwareList() directly.
 function save() {
-  localStorage.setItem('txns', JSON.stringify(transactions));
-  localStorage.setItem('journals', JSON.stringify(journals));
-  localStorage.setItem('assets', JSON.stringify(assets));
-  localStorage.setItem('liabilities', JSON.stringify(liabilities));
+  localStorage.setItem('txns',         JSON.stringify(transactions));
+  localStorage.setItem('journals',     JSON.stringify(journals));
+  localStorage.setItem('assets',       JSON.stringify(assets));
+  localStorage.setItem('liabilities',  JSON.stringify(liabilities));
   localStorage.setItem('softwareList', JSON.stringify(softwareList));
 }
 
@@ -874,7 +880,7 @@ function addTransactionDoubleEntry() {
 
   const totalAmount = debits.reduce((s, d) => s + d.amount, 0);
 
-  transactions.unshift({
+  const newTx = {
     id: uid(),
     date,
     ref: ref || 'TX-' + uid().slice(0,6),
@@ -885,9 +891,10 @@ function addTransactionDoubleEntry() {
     amount: totalAmount,
     gst: gstOn ? 'yes' : 'no',
     method: 'Journal'
-  });
+  };
 
-  save();
+  transactions.unshift(newTx);
+  dbSaveTransaction(newTx);
   renderAll();
 
   // Reset form
@@ -1086,7 +1093,7 @@ function saveJournal() {
   
   const total = lines.reduce((sum, l) => sum + l.debit, 0);
   
-  journals.unshift({
+  const newJournal = {
     id: uid(),
     date,
     ref,
@@ -1095,9 +1102,10 @@ function saveJournal() {
     total,
     gst: gstOn ? 'yes' : 'no',
     createdAt: new Date().toISOString()
-  });
-  
-  save();
+  };
+
+  journals.unshift(newJournal);
+  dbSaveJournal(newJournal);
   initJournalLines();
   document.getElementById('journal-ref').value = '';
   document.getElementById('journal-narration').value = '';
@@ -1194,8 +1202,7 @@ function renderJournals() {
 
 function deleteJournal(id) {
   if (!confirm('Delete this journal entry?')) return;
-  journals = journals.filter(j => j.id !== id);
-  save();
+  dbDeleteJournal(id);
   renderAll();
   toast('Journal deleted');
 }
@@ -1324,28 +1331,26 @@ function saveEditedJournal() {
   if (editJournalSource === 'journal') {
     const j = journals.find(j => j.id === editJournalId);
     if (!j) return;
-    // Check ref uniqueness (allow same ref if it's this entry)
     if (journals.some(jj => jj.ref === ref && jj.id !== editJournalId)) {
       toast('Reference number already used by another entry'); return;
     }
-    j.date = date;
-    j.ref = ref;
+    j.date      = date;
+    j.ref       = ref;
     j.narration = narration;
-    j.lines = lines;
-    j.total = lines.reduce((s, l) => s + l.debit, 0);
+    j.lines     = lines;
+    j.total     = lines.reduce((s, l) => s + l.debit, 0);
+    dbSaveJournal(j);
   } else {
-    // transaction source
     const t = transactions.find(t => t.id === editJournalId);
     if (!t) return;
-    t.date = date;
-    t.ref = ref;
-    t.desc = narration;
-    t.debits = lines.filter(l => l.debit > 0).map(l => ({ account: l.accountId, amount: l.debit }));
+    t.date    = date;
+    t.ref     = ref;
+    t.desc    = narration;
+    t.debits  = lines.filter(l => l.debit  > 0).map(l => ({ account: l.accountId, amount: l.debit }));
     t.credits = lines.filter(l => l.credit > 0).map(l => ({ account: l.accountId, amount: l.credit }));
-    t.amount = t.debits.reduce((s, d) => s + d.amount, 0);
+    t.amount  = t.debits.reduce((s, d) => s + d.amount, 0);
+    dbSaveTransaction(t);
   }
-
-  save();
   closeModal('edit-journal-modal');
   renderAll();
   toast('Journal entry updated ✓');
@@ -2123,12 +2128,14 @@ function renderAssets() {
 
 function openAssetModal() { document.getElementById('asset-modal').classList.add('show'); }
 function saveAsset() {
-  const name = document.getElementById('asset-name').value.trim();
+  const name  = document.getElementById('asset-name').value.trim();
   const value = parseFloat(document.getElementById('asset-value').value);
-  const type = document.getElementById('asset-type').value;
+  const type  = document.getElementById('asset-type').value;
   if (!name || isNaN(value)) { toast('Fill in all asset fields.'); return; }
-  assets.push({ id: uid(), name, value, type });
-  save(); renderAll();
+  const asset = { id: uid(), name, value, type };
+  assets.push(asset);
+  dbSaveAsset(asset);
+  renderAll();
   document.getElementById('asset-modal').classList.remove('show');
   document.getElementById('asset-name').value = '';
   document.getElementById('asset-value').value = '';
@@ -2136,8 +2143,8 @@ function saveAsset() {
 }
 function deleteAsset(id) {
   if (!confirm('Remove this asset?')) return;
-  assets = assets.filter(a => a.id !== id);
-  save(); renderAll();
+  dbDeleteAsset(id);
+  renderAll();
 }
 
 function openLiabilityModal() { document.getElementById('liability-modal').classList.add('show'); }
@@ -2146,8 +2153,10 @@ function saveLiability() {
   const value = parseFloat(document.getElementById('liab-value').value);
   const type  = document.getElementById('liab-type').value;
   if (!name || isNaN(value) || value <= 0) { toast('Fill in all liability fields.'); return; }
-  liabilities.push({ id: uid(), name, value, type });
-  save(); renderAll();
+  const liability = { id: uid(), name, value, type };
+  liabilities.push(liability);
+  dbSaveLiability(liability);
+  renderAll();
   document.getElementById('liability-modal').classList.remove('show');
   document.getElementById('liab-name').value = '';
   document.getElementById('liab-value').value = '';
@@ -2155,8 +2164,8 @@ function saveLiability() {
 }
 function deleteLiability(id) {
   if (!confirm('Remove this liability?')) return;
-  liabilities = liabilities.filter(l => l.id !== id);
-  save(); renderAll();
+  dbDeleteLiability(id);
+  renderAll();
 }
 
 // ── GST ──
@@ -2300,7 +2309,7 @@ function updateSwUsers(swId) {
     });
     sw.monthlyUsers[m.key] = entry;
   });
-  save();
+  dbSaveSoftwareList();
   renderUsersTable();
   renderIncomeStatement();
 }
@@ -2409,19 +2418,20 @@ function closeEditModal() { document.getElementById('edit-modal').classList.remo
 function saveEdit() {
   const t = transactions.find(x => x.id === editId);
   if (!t) return;
-  t.date = document.getElementById('edit-date').value;
-  t.type = document.getElementById('edit-type').value;
-  t.desc = document.getElementById('edit-desc').value;
-  t.amount = parseFloat(document.getElementById('edit-amount').value);
+  t.date     = document.getElementById('edit-date').value;
+  t.type     = document.getElementById('edit-type').value;
+  t.desc     = document.getElementById('edit-desc').value;
+  t.amount   = parseFloat(document.getElementById('edit-amount').value);
   t.category = document.getElementById('edit-category').value;
-  t.gst = document.getElementById('edit-gst').value;
-  t.method = document.getElementById('edit-method').value;
-  save(); renderAll(); closeEditModal(); toast('Transaction updated ✓');
+  t.gst      = document.getElementById('edit-gst').value;
+  t.method   = document.getElementById('edit-method').value;
+  dbSaveTransaction(t);
+  renderAll(); closeEditModal(); toast('Transaction updated ✓');
 }
 function deleteTx(id) {
   if (!confirm('Delete this transaction?')) return;
-  transactions = transactions.filter(t => t.id !== id);
-  save(); renderAll(); toast('Deleted');
+  dbDeleteTransaction(id);
+  renderAll(); toast('Deleted');
 }
 
 // ══════════════════════════════════════════════════════
@@ -3074,7 +3084,7 @@ function saveNewSoftware() {
     monthlyUsers: Object.fromEntries(MONTHS.map(m => [m.key, { free:0, staff:0 }]))
   };
   softwareList.push(newSw);
-  save();
+  dbSaveSoftwareList();
   renderSoftwareSettings();
   renderUsersTable();
   closeModal('add-software-modal');
@@ -3084,21 +3094,16 @@ function saveNewSoftware() {
 function deleteSoftware(swId) {
   if (!confirm('Remove this software and all its user data?')) return;
   softwareList = softwareList.filter(s => s.id !== swId);
-  save();
+  if (_businessId) {
+    _supabase.from('software_products').delete().eq('id', swId);
+    _supabase.from('software_tiers').delete().eq('software_id', swId);
+    _supabase.from('software_monthly_users').delete().eq('software_id', swId);
+  }
+  cacheSet('softwareList', softwareList);
   renderSoftwareSettings();
   renderUsersTable();
   renderIncomeStatement();
   toast('Software removed');
-}
-
-function openAddTierModal(swId) {
-  addTierSwId = swId;
-  const sw = softwareList.find(s => s.id === swId);
-  document.getElementById('add-tier-sw-name').textContent = sw?.name || '';
-  document.getElementById('new-tier-name').value = '';
-  document.getElementById('new-tier-price').value = '';
-  document.getElementById('add-tier-modal').classList.add('show');
-  setTimeout(() => document.getElementById('new-tier-name').focus(), 50);
 }
 
 function saveNewTier() {
@@ -3110,7 +3115,7 @@ function saveNewTier() {
   const tierId = 't' + uid();
   sw.tiers.push({ id: tierId, name, price });
   MONTHS.forEach(m => { sw.monthlyUsers[m.key] = sw.monthlyUsers[m.key] || {}; sw.monthlyUsers[m.key][tierId] = 0; });
-  save();
+  dbSaveSoftwareList();
   renderSoftwareSettings();
   renderUsersTable();
   closeModal('add-tier-modal');
@@ -3122,7 +3127,8 @@ function deleteTier(swId, tierId) {
   const sw = softwareList.find(s => s.id === swId);
   if (!sw) return;
   sw.tiers = sw.tiers.filter(t => t.id !== tierId);
-  save();
+  if (_businessId) _supabase.from('software_tiers').delete().eq('id', tierId);
+  cacheSet('softwareList', softwareList);
   renderSoftwareSettings();
   renderUsersTable();
   toast('Tier removed');
@@ -3132,7 +3138,7 @@ function renameSoftware(swId, newName) {
   const sw = softwareList.find(s => s.id === swId);
   if (!sw || !newName.trim()) return;
   sw.name = newName.trim();
-  save();
+  dbSaveSoftwareList();
   renderSoftwareSettings();
   renderUsersTable();
   renderIncomeStatement();
@@ -3143,14 +3149,14 @@ function renameTier(swId, tierId, newName) {
   const sw = softwareList.find(s => s.id === swId);
   if (!sw) return;
   const t = sw.tiers.find(t => t.id === tierId);
-  if (t && newName.trim()) { t.name = newName.trim(); save(); renderUsersTable(); }
+  if (t && newName.trim()) { t.name = newName.trim(); dbSaveSoftwareList(); renderUsersTable(); }
 }
 
 function updateTierPrice(swId, tierId, newPrice) {
   const sw = softwareList.find(s => s.id === swId);
   if (!sw) return;
   const t = sw.tiers.find(t => t.id === tierId);
-  if (t) { t.price = parseFloat(newPrice)||0; save(); renderUsersTable(); renderIncomeStatement(); }
+  if (t) { t.price = parseFloat(newPrice)||0; dbSaveSoftwareList(); renderUsersTable(); renderIncomeStatement(); }
 }
 
 // ── SOFTWARE INCOME → IS ──
