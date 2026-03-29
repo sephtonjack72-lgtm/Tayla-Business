@@ -322,6 +322,7 @@
       <div class="dropdown-item" onclick="showPage('tax-page');closeReportsMenu()">Tax</div>
     </div>
   </div>
+  <div class="tab" onclick="showPage('reconcile-page')">⇄ Reconcile</div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
@@ -978,6 +979,177 @@
 
 </div>
 
+<!-- ══════════════════ RECONCILE ══════════════════ -->
+<div id="reconcile-page" class="page">
+
+  <!-- Sub-nav -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
+    <button class="recon-tab active" onclick="showReconTab('accounts')" id="rtab-accounts" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🏦 Bank Accounts</button>
+    <button class="recon-tab" onclick="showReconTab('import')" id="rtab-import" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">⬆ Import Statement</button>
+    <button class="recon-tab" onclick="showReconTab('match')" id="rtab-match" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">✓ Match & Reconcile</button>
+  </div>
+
+  <!-- ── BANK ACCOUNTS TAB ── -->
+  <div id="recon-accounts">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;" class="responsive-2col">
+
+      <!-- Add account -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Add Bank Account</span></div>
+        <div class="card-body">
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="form-group">
+              <label>Account Name</label>
+              <input type="text" id="ba-name" placeholder="e.g. CommBank Business Cheque">
+            </div>
+            <div class="form-group">
+              <label>Bank</label>
+              <select id="ba-bank">
+                <option value="">Select bank…</option>
+                <option>Commonwealth Bank</option>
+                <option>ANZ</option>
+                <option>NAB</option>
+                <option>Westpac</option>
+                <option>Bendigo Bank</option>
+                <option>Macquarie</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>BSB</label>
+                <input type="text" id="ba-bsb" placeholder="062-000" maxlength="7">
+              </div>
+              <div class="form-group">
+                <label>Account Number</label>
+                <input type="text" id="ba-number" placeholder="12345678">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Linked Ledger Account</label>
+              <select id="ba-ledger">
+                <option value="1010">1010 Cash at Bank</option>
+                <option value="1020">1020 Accounts Receivable</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Opening Balance ($)</label>
+              <input type="number" id="ba-opening" placeholder="0.00" step="0.01">
+            </div>
+          </div>
+          <button class="btn btn-primary mt" style="width:100%;" onclick="saveBankAccount()">Add Bank Account</button>
+        </div>
+      </div>
+
+      <!-- Account list -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Your Bank Accounts</span></div>
+        <div class="card-body" style="padding:0;">
+          <div id="bank-accounts-list">
+            <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No bank accounts yet — add one to get started.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── IMPORT TAB ── -->
+  <div id="recon-import" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;" class="responsive-2col">
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Import Bank Statement</span></div>
+        <div class="card-body">
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Bank Account</label>
+            <select id="import-account-select"></select>
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label>Bank Format</label>
+            <select id="import-format">
+              <option value="auto">Auto-detect</option>
+              <option value="commbank">Commonwealth Bank</option>
+              <option value="anz">ANZ</option>
+              <option value="nab">NAB</option>
+              <option value="westpac">Westpac</option>
+              <option value="generic">Generic (Date, Description, Amount)</option>
+            </select>
+          </div>
+
+          <!-- Drop zone -->
+          <div id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()"
+            style="border:2px dashed var(--border);border-radius:12px;padding:36px;text-align:center;cursor:pointer;transition:border-color .15s;margin-bottom:16px;"
+            onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"
+            ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="event.preventDefault();handleCsvDrop(event)">
+            <div style="font-size:28px;margin-bottom:8px;">📄</div>
+            <div style="font-size:14px;font-weight:500;color:var(--text2);">Drop CSV here or click to upload</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px;">Export from your bank's internet banking</div>
+            <input type="file" id="csv-file-input" accept=".csv" style="display:none;" onchange="handleCsvFile(this)">
+          </div>
+
+          <div id="import-error" style="display:none;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;margin-bottom:12px;"></div>
+          <div id="import-preview-wrap" style="display:none;">
+            <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;" id="import-preview-label"></div>
+            <div class="table-wrap" style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+              <table id="import-preview-table">
+                <thead><tr id="import-preview-head"></tr></thead>
+                <tbody id="import-preview-body"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-primary mt" style="width:100%;" onclick="confirmImport()">Import These Transactions →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Format guide -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Bank Export Guide</span></div>
+        <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.8;">
+          <div style="margin-bottom:16px;"><strong>CommBank:</strong> Accounts → Export → CSV (Date, Amount, Description, Balance)</div>
+          <div style="margin-bottom:16px;"><strong>ANZ:</strong> Transactions → Export → CSV</div>
+          <div style="margin-bottom:16px;"><strong>NAB:</strong> Accounts → Transaction History → Download → CSV</div>
+          <div style="margin-bottom:16px;"><strong>Westpac:</strong> Accounts → Export → Spreadsheet (.csv)</div>
+          <div style="padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;">
+            💡 If auto-detect fails, select your bank format manually and try again. For other banks use Generic format and make sure columns are: Date, Description, Amount.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── MATCH TAB ── -->
+  <div id="recon-match" style="display:none;">
+
+    <!-- Controls -->
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:20px;flex-wrap:wrap;">
+      <select id="match-account-select" onchange="renderMatchView()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;"></select>
+      <select id="match-filter" onchange="renderMatchView()" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
+        <option value="unmatched">Unmatched</option>
+        <option value="all">All imported</option>
+        <option value="matched">Matched</option>
+        <option value="ignored">Ignored</option>
+      </select>
+      <div id="recon-summary" style="font-size:13px;color:var(--text3);margin-left:auto;"></div>
+    </div>
+
+    <!-- Match list -->
+    <div id="match-list"></div>
+
+    <!-- Empty state -->
+    <div id="match-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+      <div style="font-size:32px;margin-bottom:12px;">✓</div>
+      <div style="font-size:15px;font-weight:500;color:var(--text2);">All caught up!</div>
+      <div style="font-size:13px;margin-top:6px;">No unmatched transactions. Import a new statement or change the filter.</div>
+    </div>
+
+  </div>
+
+</div><!-- /reconcile-page -->
+
 </main><!-- /main -->
 
 <!-- ADD SOFTWARE MODAL -->
@@ -1157,6 +1329,7 @@
 <div id="toast"></div>
 
 <script src="db.js"></script>
+<script src="reconcile.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
