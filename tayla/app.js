@@ -919,7 +919,6 @@ function injectGstLine(side, line) {
   container.appendChild(div);
   validateTx();
 }
-}
 
 function addTransactionDoubleEntry() {
   const gstOn = document.getElementById('tx-gst-toggle').checked;
