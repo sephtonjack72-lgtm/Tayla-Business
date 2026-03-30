@@ -391,12 +391,39 @@ function renderReceiptList() {
       <td class="mono" style="color:var(--text3);">${r.gst_amount ? fmt(r.gst_amount) : '—'}</td>
       <td>${typeBadge(r.type)}</td>
       <td>
-        ${r.file_url
-          ? `<a href="${r.file_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--accent3);">View 🔗</a>`
-          : '<span style="color:var(--text3);font-size:12px;">No file</span>'}
+        <div class="flex-gap">
+          ${r.file_url
+            ? `<a href="${r.file_url}" target="_blank" class="btn btn-ghost btn-sm" style="color:var(--accent3);">View 🔗</a>`
+            : '<span style="color:var(--text3);font-size:12px;">No file</span>'}
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="deleteReceiptConfirm('${r.id}')">✕</button>
+        </div>
       </td>
     </tr>
   `).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  DELETE RECEIPT
+// ══════════════════════════════════════════════════════
+
+async function deleteReceiptConfirm(id) {
+  const r = receipts.find(r => r.id === id);
+  if (!confirm(`Delete receipt${r?.supplier ? ' from ' + r.supplier : ''}? This won't delete the linked transaction or bill.`)) return;
+
+  receipts = receipts.filter(r => r.id !== id);
+  localStorage.setItem('receipts', JSON.stringify(receipts));
+
+  if (_businessId) {
+    // Delete from storage if file exists
+    if (r?.file_url) {
+      const path = `${_businessId}/${id}.jpg`;
+      await _supabase.storage.from('receipts').remove([path]);
+    }
+    await _supabase.from('receipts').delete().eq('id', id);
+  }
+
+  renderReceiptList();
+  toast('Receipt deleted');
 }
 
 // ══════════════════════════════════════════════════════
