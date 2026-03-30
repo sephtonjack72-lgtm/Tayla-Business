@@ -136,7 +136,7 @@ async function analyseReceipt() {
     const mediaType  = _currentReceiptFile.type;
 
     const response = await fetch(
-      'https://vyikolylJzygmxiahcul.supabase.co/functions/v1/analyse-receipt',
+      'https://vyikolyljzygmxiahcul.supabase.co/functions/v1/analyse-receipt',
       {
         method: 'POST',
         headers: {
