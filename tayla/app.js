@@ -701,7 +701,7 @@ function showPage(id) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   const reportPages  = ['income-stmt','balance-sheet','gst','users-page','tax-page','assets-page'];
-  const invoicePages = ['invoices-page','bills-page'];
+  const invoicePages = ['invoices-page','bills-page','receipts-page'];
   if (reportPages.includes(id)) {
     document.getElementById('reports-tab').classList.add('active');
   } else if (invoicePages.includes(id)) {
