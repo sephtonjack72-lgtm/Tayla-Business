@@ -215,27 +215,55 @@ function loadBillLines(lines) {
 
 function addBillLine(data = {}) {
   const id = billLineCount++;
+  const qty        = data.qty ?? 1;
+  const unit_price = data.unit_price ?? '';
+  const gst        = data.gst ?? 'yes';
+  const subtotal   = (parseFloat(qty) || 0) * (parseFloat(unit_price) || 0);
+  const autoGst    = data.gst_amount != null ? data.gst_amount : (gst === 'yes' ? +(subtotal / 9).toFixed(2) : 0);
+
   const div = document.createElement('div');
   div.className = 'inv-line-row';
+  div.style.cssText = 'display:grid;grid-template-columns:2fr 70px 100px 70px 90px 90px 36px;gap:8px;margin-bottom:8px;align-items:center;';
   div.innerHTML = `
     <input type="text" value="${data.description || ''}" placeholder="Description"
       style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);"
       oninput="renderBillSummary()">
-    <input type="number" value="${data.qty ?? 1}" min="0" step="0.01"
+    <input type="number" value="${qty}" min="0" step="0.01"
       style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);text-align:right;"
-      oninput="renderBillSummary()">
-    <input type="number" value="${data.unit_price ?? ''}" min="0" step="0.01" placeholder="0.00"
+      oninput="recalcBillLineGst(this);renderBillSummary()">
+    <input type="number" value="${unit_price}" min="0" step="0.01" placeholder="0.00"
       style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);text-align:right;"
-      oninput="renderBillSummary()">
-    <select style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" onchange="renderBillSummary()">
-      <option value="yes" ${(data.gst ?? 'yes') === 'yes' ? 'selected' : ''}>GST</option>
-      <option value="no"  ${data.gst === 'no' ? 'selected' : ''}>Ex-GST</option>
+      oninput="recalcBillLineGst(this);renderBillSummary()">
+    <select style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);"
+      onchange="recalcBillLineGst(this);renderBillSummary()">
+      <option value="yes" ${gst === 'yes' ? 'selected' : ''}>GST</option>
+      <option value="no"  ${gst === 'no'  ? 'selected' : ''}>Ex-GST</option>
     </select>
+    <input type="number" value="${autoGst}" min="0" step="0.01" placeholder="0.00"
+      class="bill-gst-input"
+      style="padding:8px 12px;border:1.5px solid var(--accent2);border-radius:8px;font-size:13px;background:rgba(232,197,71,.08);text-align:right;"
+      title="Auto-calculated — edit if amount differs"
+      oninput="renderBillSummary()">
     <div style="padding:8px 12px;background:var(--surface2);border-radius:8px;font-size:13px;font-family:'DM Mono',monospace;text-align:right;" class="bill-line-total">$0.00</div>
     <button onclick="removeBillLine(this)" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:4px;">✕</button>
   `;
   document.getElementById('bill-lines').appendChild(div);
   renderBillSummary();
+}
+
+// Recalculate GST input when qty/price/toggle changes
+function recalcBillLineGst(el) {
+  const row    = el.closest('.inv-line-row');
+  if (!row) return;
+  const inputs = row.querySelectorAll('input');
+  const select = row.querySelector('select');
+  const qty    = parseFloat(inputs[1]?.value) || 0;
+  const price  = parseFloat(inputs[2]?.value) || 0;
+  const gst    = select?.value || 'yes';
+  const sub    = qty * price;
+  const gstAmt = gst === 'yes' ? +(sub / 9).toFixed(2) : 0;
+  const gstInput = row.querySelector('.bill-gst-input');
+  if (gstInput) gstInput.value = gstAmt;
 }
 
 function removeBillLine(btn) {
@@ -246,23 +274,27 @@ function removeBillLine(btn) {
 
 function getBillLines() {
   return Array.from(document.querySelectorAll('#bill-lines .inv-line-row')).map(row => {
-    const inputs = row.querySelectorAll('input');
-    const select = row.querySelector('select');
+    const inputs   = row.querySelectorAll('input');
+    const select   = row.querySelector('select');
+    const gstInput = row.querySelector('.bill-gst-input');
     const qty        = parseFloat(inputs[1].value) || 0;
     const unit_price = parseFloat(inputs[2].value) || 0;
     const gst        = select?.value || 'yes';
     const subtotal   = +(qty * unit_price).toFixed(2);
-    const gst_amount = gst === 'yes' ? +(subtotal / 9).toFixed(2) : 0;
+    const gst_amount = gst === 'yes' ? +(parseFloat(gstInput?.value) || subtotal / 9).toFixed(2) : 0;
     return { id: uid(), description: inputs[0].value.trim(), qty, unit_price, gst, subtotal, gst_amount, total: +(subtotal + gst_amount).toFixed(2) };
   }).filter(l => l.description || l.unit_price > 0);
 }
 
 function renderBillSummary() {
   document.querySelectorAll('#bill-lines .inv-line-row').forEach(row => {
-    const inputs = row.querySelectorAll('input');
-    const gst    = row.querySelector('select')?.value || 'yes';
-    const sub    = (parseFloat(inputs[1]?.value)||0) * (parseFloat(inputs[2]?.value)||0);
-    const total  = sub + (gst === 'yes' ? sub / 9 : 0);
+    const inputs   = row.querySelectorAll('input');
+    const gstInput = row.querySelector('.bill-gst-input');
+    const qty      = parseFloat(inputs[1]?.value) || 0;
+    const price    = parseFloat(inputs[2]?.value) || 0;
+    const sub      = qty * price;
+    const gstAmt   = parseFloat(gstInput?.value) || 0;
+    const total    = sub + gstAmt;
     const el = row.querySelector('.bill-line-total');
     if (el) el.textContent = fmt(total);
   });
