@@ -1952,17 +1952,40 @@
                 <input type="date" id="rcpt-date">
               </div>
               <div class="form-group">
-                <label>Total Amount ($)</label>
-                <input type="number" id="rcpt-total" step="0.01" oninput="updateRcptGst()">
+                <label>Total Amount</label>
+                <input type="number" id="rcpt-total" step="0.01" oninput="updateRcptGst();updateRcptAud()">
+              </div>
+            </div>
+            <!-- Currency row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Currency</label>
+                <select id="rcpt-currency" onchange="onRcptCurrencyChange()">
+                  <option value="AUD">AUD</option>
+                  <option value="USD">USD</option>
+                  <option value="NZD">NZD</option>
+                  <option value="GBP">GBP</option>
+                  <option value="EUR">EUR</option>
+                  <option value="JPY">JPY</option>
+                  <option value="SGD">SGD</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Exchange Rate → AUD</label>
+                <input type="number" id="rcpt-exchange-rate" value="1" step="0.0001" min="0.0001" oninput="updateRcptAud()">
+              </div>
+              <div class="form-group">
+                <label>AUD Total</label>
+                <input type="number" id="rcpt-aud-total" step="0.01" placeholder="0.00" style="background:rgba(232,197,71,.08);border-color:var(--accent2);" readonly>
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="form-group">
-                <label>GST Amount ($)</label>
+                <label>GST Amount (AUD)</label>
                 <input type="number" id="rcpt-gst" step="0.01" placeholder="0.00">
               </div>
               <div class="form-group">
-                <label>Net Amount ($)</label>
+                <label>Net Amount (AUD)</label>
                 <input type="number" id="rcpt-net" step="0.01" placeholder="0.00" readonly style="opacity:.7;">
               </div>
             </div>
