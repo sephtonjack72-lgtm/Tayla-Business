@@ -331,6 +331,7 @@
       <div class="dropdown-item" onclick="showPage('bills-page');closeInvoicesMenu()">Bills</div>
     </div>
   </div>
+  <div class="tab" onclick="showPage('receipts-page')">📷 Receipts</div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
@@ -1784,6 +1785,197 @@
   </div>
 </div>
 
+<!-- ══════════════════ RECEIPTS ══════════════════ -->
+<div id="receipts-page" class="page">
+
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
+    <button class="rcpt-tab active" onclick="showReceiptTab('upload')"  id="rtab-upload"  style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">📷 Upload Receipt</button>
+    <button class="rcpt-tab"        onclick="showReceiptTab('list')"    id="rtab-list"    style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🗂 All Receipts</button>
+    <button class="rcpt-tab"        onclick="showReceiptTab('petty')"   id="rtab-petty"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">💵 Petty Cash</button>
+  </div>
+
+  <!-- ── UPLOAD TAB ── -->
+  <div id="rcpt-upload">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;" class="responsive-2col">
+
+      <!-- Drop zone -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Upload Receipt or Bill</span></div>
+        <div class="card-body">
+          <div id="rcpt-drop-zone"
+            onclick="document.getElementById('rcpt-file-input').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+            ondragleave="this.style.borderColor='var(--border)'"
+            ondrop="event.preventDefault();handleReceiptDrop(event)"
+            style="border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;transition:border-color .15s;margin-bottom:16px;"
+            onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div id="rcpt-drop-preview" style="display:none;margin-bottom:12px;">
+              <img id="rcpt-preview-img" style="max-height:200px;max-width:100%;border-radius:8px;box-shadow:var(--shadow);">
+            </div>
+            <div id="rcpt-drop-text">
+              <div style="font-size:36px;margin-bottom:10px;">📷</div>
+              <div style="font-size:14px;font-weight:500;color:var(--text2);">Drop receipt here or click to upload</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:6px;">JPG, PNG or PDF · Max 10MB</div>
+            </div>
+            <input type="file" id="rcpt-file-input" accept="image/*,.pdf" style="display:none;" onchange="handleReceiptFile(this)">
+          </div>
+
+          <div id="rcpt-upload-error" style="display:none;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;margin-bottom:12px;"></div>
+
+          <button id="rcpt-analyse-btn" onclick="analyseReceipt()" class="btn btn-primary" style="width:100%;display:none;">
+            🤖 Analyse with AI →
+          </button>
+          <div id="rcpt-analysing" style="display:none;text-align:center;padding:16px;color:var(--text3);font-size:13px;">
+            <div style="font-size:24px;margin-bottom:8px;">🤖</div>
+            Reading receipt…
+          </div>
+        </div>
+      </div>
+
+      <!-- AI result / review form -->
+      <div class="card" id="rcpt-review-card" style="display:none;">
+        <div class="card-header flex-between">
+          <span class="card-title">Review Extracted Data</span>
+          <span style="font-size:11px;color:var(--text3);background:var(--surface2);padding:3px 10px;border-radius:99px;">AI extracted — please verify</span>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="form-group">
+              <label>Supplier / From</label>
+              <input type="text" id="rcpt-supplier" placeholder="e.g. Woolworths">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>Date</label>
+                <input type="date" id="rcpt-date">
+              </div>
+              <div class="form-group">
+                <label>Total Amount ($)</label>
+                <input type="number" id="rcpt-total" step="0.01" oninput="updateRcptGst()">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label>GST Amount ($)</label>
+                <input type="number" id="rcpt-gst" step="0.01" placeholder="0.00">
+              </div>
+              <div class="form-group">
+                <label>Net Amount ($)</label>
+                <input type="number" id="rcpt-net" step="0.01" placeholder="0.00" readonly style="opacity:.7;">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Description</label>
+              <input type="text" id="rcpt-desc" placeholder="What was this for?">
+            </div>
+            <div class="form-group">
+              <label>Suggested Account</label>
+              <select id="rcpt-account"></select>
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="rcpt-type">
+                <option value="bill">📥 Create Bill (Accounts Payable)</option>
+                <option value="transaction">💳 Create Transaction (direct)</option>
+                <option value="petty">💵 Petty Cash Expense</option>
+              </select>
+            </div>
+            <div class="form-group" id="rcpt-payment-account-group">
+              <label>Payment Account</label>
+              <select id="rcpt-payment-account">
+                <option value="1010">1010 Cash at Bank</option>
+                <option value="1015">1015 Petty Cash</option>
+                <option value="2010">2010 Accounts Payable</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="rcpt-review-error" style="display:none;margin-top:12px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;"></div>
+
+          <div style="display:flex;gap:10px;margin-top:20px;">
+            <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="resetReceiptUpload()">← Start Over</button>
+            <button class="btn btn-accent" style="flex:1;" onclick="saveReceiptEntry()">✓ Save Entry</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ALL RECEIPTS ── -->
+  <div id="rcpt-list" style="display:none;">
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">All Receipts</span>
+        <input type="text" id="rcpt-search" placeholder="Search…" style="width:180px;" oninput="renderReceiptList()">
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Date</th><th>Supplier</th><th>Description</th><th>Amount</th><th>GST</th><th>Type</th><th>Receipt</th></tr></thead>
+            <tbody id="rcpt-tbody"></tbody>
+          </table>
+        </div>
+        <div id="rcpt-list-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
+          <div style="font-size:32px;margin-bottom:12px;">📷</div>
+          <div style="font-size:15px;font-weight:500;color:var(--text2);">No receipts yet</div>
+          <button class="btn btn-primary mt" onclick="showReceiptTab('upload')">Upload First Receipt</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PETTY CASH ── -->
+  <div id="rcpt-petty" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;" class="responsive-2col">
+
+      <!-- Float settings -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Petty Cash Float</span></div>
+        <div class="card-body">
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="form-group">
+              <label>Float Amount ($)</label>
+              <input type="number" id="petty-float" step="0.01" placeholder="e.g. 200.00"
+                value="${localStorage.getItem('pettyCashFloat') || ''}"
+                oninput="savePettyCashFloat()">
+            </div>
+            <div style="padding:14px;background:var(--surface2);border-radius:8px;font-size:13px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span style="color:var(--text2);">Float</span>
+                <span class="mono" id="petty-float-display">—</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                <span style="color:var(--text2);">Total Spent</span>
+                <span class="mono negative" id="petty-spent-display">—</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--border);padding-top:8px;margin-top:4px;">
+                <span>Remaining</span>
+                <span class="mono" id="petty-remaining-display">—</span>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="showReceiptTab('upload');document.getElementById('rcpt-type').value='petty';document.getElementById('rcpt-payment-account').value='1015';">
+              + Add Petty Cash Expense
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Petty cash transactions -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Petty Cash Transactions</span></div>
+        <div class="card-body" style="padding:0;">
+          <div id="petty-txn-list">
+            <div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">No petty cash transactions yet.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /receipts-page -->
+
 </main><!-- /main -->
 
 <!-- ADD SOFTWARE MODAL -->
@@ -1967,6 +2159,7 @@
 <script src="invoices.js"></script>
 <script src="bills.js"></script>
 <script src="assets.js"></script>
+<script src="receipts.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
