@@ -276,7 +276,7 @@ const BIZ_TYPES = [
 
 let setupStep = 1;
 let setupData = { bizType: 'saas', logoBase64: null };
-const SETUP_TOTAL = 5;
+const SETUP_TOTAL = 6;
 
 function initSetupWizard() {
   setupStep = 1;
@@ -436,7 +436,19 @@ async function saveSetup() {
   }
 
   _businessProfile = data;
-  applyProfileToApp(data);
+  setBusinessId(data.id);
+
+  // Go to import step
+  setupStep = 6;
+  showSetupStep(6);
+}
+
+function skipImport() {
+  finishSetup();
+}
+
+function finishSetup() {
+  applyProfileToApp(_businessProfile);
   hideAllOverlays();
   toast('Welcome to Tayla Business! 🎉');
 }
