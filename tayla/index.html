@@ -1581,6 +1581,11 @@
         <label>Description</label>
         <input type="text" id="bill-paid-desc">
       </div>
+      <!-- Journal preview — auto-populated, shows GST line if applicable -->
+      <div id="bill-paid-journal-preview" style="display:none;background:var(--surface2);border-radius:8px;padding:14px;">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;">Journal Entry Preview</div>
+        <div id="bill-paid-journal-lines" style="font-family:'DM Mono',monospace;font-size:12px;line-height:2;"></div>
+      </div>
     </div>
     <div class="flex-gap" style="justify-content:flex-end;">
       <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('mark-bill-paid-modal')">Cancel</button>
