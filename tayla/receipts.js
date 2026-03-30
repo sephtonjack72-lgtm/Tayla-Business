@@ -199,16 +199,37 @@ function populateRcptReviewForm(data) {
   document.getElementById('rcpt-supplier').value = data.supplier || '';
   document.getElementById('rcpt-date').value     = data.date     || new Date().toISOString().split('T')[0];
   document.getElementById('rcpt-total').value    = data.total    || '';
-  document.getElementById('rcpt-gst').value      = data.gst != null ? data.gst : '';
-  document.getElementById('rcpt-net').value      = data.net  != null ? data.net  : '';
   document.getElementById('rcpt-desc').value     = data.description || '';
+
+  // Set currency — if AI detected a non-AUD currency, set it and fetch rate
+  const currency = data.currency || 'AUD';
+  const currSel = document.getElementById('rcpt-currency');
+  if (currSel) {
+    currSel.value = currency;
+    if (currency !== 'AUD') {
+      onRcptCurrencyChange(); // triggers rate fetch
+    } else {
+      document.getElementById('rcpt-exchange-rate').value = '1';
+      updateRcptAud();
+    }
+  }
+
+  // GST — only applicable if AUD (Australian receipt)
+  if (currency === 'AUD' && data.gst != null) {
+    document.getElementById('rcpt-gst').value = data.gst;
+    document.getElementById('rcpt-net').value = data.net != null ? data.net : +(data.total - data.gst).toFixed(2);
+  } else if (currency !== 'AUD') {
+    // Foreign receipts — no Australian GST
+    document.getElementById('rcpt-gst').value = '0';
+    document.getElementById('rcpt-net').value = data.total || '';
+  }
 
   if (data.account) {
     const sel = document.getElementById('rcpt-account');
     if (sel) sel.value = data.account;
   }
 
-  // Show confidence badge
+  // Confidence badge
   const card = document.getElementById('rcpt-review-card');
   card.style.display = 'block';
 
@@ -221,21 +242,58 @@ function populateRcptReviewForm(data) {
       badge.style.background = colours[data.confidence] || 'var(--surface2)';
     }
   }
+
+  // Currency flag
+  if (currency !== 'AUD') {
+    const errEl = document.getElementById('rcpt-upload-error');
+    errEl.textContent = `⚠ Receipt is in ${currency} — exchange rate auto-fetched. Verify the AUD total before saving.`;
+    errEl.style.display = 'block';
+    errEl.style.background = 'rgba(232,197,71,.15)';
+    errEl.style.color = '#856404';
+  }
 }
 
-function populateRcptAccountSelect() {
-  const sel = document.getElementById('rcpt-account');
-  if (!sel) return;
-  const expenses = CHART_OF_ACCOUNTS.expenses?.accounts || [];
-  sel.innerHTML = expenses.map(a => `<option value="${a.id}">${a.id} ${a.name}</option>`).join('');
+async function onRcptCurrencyChange() {
+  const currency = document.getElementById('rcpt-currency')?.value || 'AUD';
+  const rateInput = document.getElementById('rcpt-exchange-rate');
+  if (currency === 'AUD') {
+    rateInput.value = '1';
+    updateRcptAud();
+    return;
+  }
+  rateInput.value = '…';
+  const rate = typeof fetchExchangeRate === 'function'
+    ? await fetchExchangeRate(currency, 'AUD')
+    : null;
+  rateInput.value = rate ? rate.toFixed(4) : '';
+  updateRcptAud();
+  updateRcptGst();
+}
+
+function updateRcptAud() {
+  const total    = parseFloat(document.getElementById('rcpt-total')?.value) || 0;
+  const rate     = parseFloat(document.getElementById('rcpt-exchange-rate')?.value) || 1;
+  const audTotal = +(total * rate).toFixed(2);
+  const audEl    = document.getElementById('rcpt-aud-total');
+  if (audEl) audEl.value = audTotal || '';
 }
 
 function updateRcptGst() {
-  const total = parseFloat(document.getElementById('rcpt-total')?.value) || 0;
-  const gst   = +(total / 11).toFixed(2);
-  const net   = +(total - gst).toFixed(2);
-  document.getElementById('rcpt-gst').value = gst;
-  document.getElementById('rcpt-net').value = net;
+  const currency = document.getElementById('rcpt-currency')?.value || 'AUD';
+  const rate     = parseFloat(document.getElementById('rcpt-exchange-rate')?.value) || 1;
+  const total    = parseFloat(document.getElementById('rcpt-total')?.value) || 0;
+  const audTotal = +(total * rate).toFixed(2);
+
+  // Only calculate GST for AUD receipts
+  if (currency === 'AUD') {
+    const gst = +(audTotal / 11).toFixed(2);
+    const net = +(audTotal - gst).toFixed(2);
+    document.getElementById('rcpt-gst').value = gst;
+    document.getElementById('rcpt-net').value = net;
+  } else {
+    document.getElementById('rcpt-gst').value = '0';
+    document.getElementById('rcpt-net').value = audTotal;
+  }
 }
 
 function resetReceiptUpload() {
@@ -258,20 +316,30 @@ function resetReceiptUpload() {
 //  SAVE ENTRY
 // ══════════════════════════════════════════════════════
 
+function populateRcptAccountSelect() {
+  const sel = document.getElementById('rcpt-account');
+  if (!sel) return;
+  const expenses = CHART_OF_ACCOUNTS.expenses?.accounts || [];
+  sel.innerHTML = expenses.map(a => `<option value="${a.id}">${a.id} ${a.name}</option>`).join('');
+}
+
 async function saveReceiptEntry() {
-  const supplier = document.getElementById('rcpt-supplier').value.trim();
-  const date     = document.getElementById('rcpt-date').value;
-  const total    = parseFloat(document.getElementById('rcpt-total').value) || 0;
-  const gst      = parseFloat(document.getElementById('rcpt-gst').value)   || 0;
-  const net      = +(total - gst).toFixed(2);
-  const desc     = document.getElementById('rcpt-desc').value.trim();
-  const account  = document.getElementById('rcpt-account').value;
-  const type     = document.getElementById('rcpt-type').value;
-  const payAcct  = document.getElementById('rcpt-payment-account').value;
-  const errEl    = document.getElementById('rcpt-review-error');
+  const supplier  = document.getElementById('rcpt-supplier').value.trim();
+  const date      = document.getElementById('rcpt-date').value;
+  const rawTotal  = parseFloat(document.getElementById('rcpt-total').value) || 0;
+  const currency  = document.getElementById('rcpt-currency')?.value || 'AUD';
+  const rate      = parseFloat(document.getElementById('rcpt-exchange-rate')?.value) || 1;
+  const audTotal  = currency === 'AUD' ? rawTotal : +(rawTotal * rate).toFixed(2);
+  const gst       = parseFloat(document.getElementById('rcpt-gst').value) || 0;
+  const net       = +(audTotal - gst).toFixed(2);
+  const desc      = document.getElementById('rcpt-desc').value.trim();
+  const account   = document.getElementById('rcpt-account').value;
+  const type      = document.getElementById('rcpt-type').value;
+  const payAcct   = document.getElementById('rcpt-payment-account').value;
+  const errEl     = document.getElementById('rcpt-review-error');
   errEl.style.display = 'none';
 
-  if (!date || !total) { errEl.textContent = 'Date and amount are required.'; errEl.style.display = 'block'; return; }
+  if (!date || !rawTotal) { errEl.textContent = 'Date and amount are required.'; errEl.style.display = 'block'; return; }
 
   const receiptId = uid();
 
@@ -281,10 +349,16 @@ async function saveReceiptEntry() {
     fileUrl = await uploadReceiptToStorage(_currentReceiptFile, receiptId);
   }
 
-  // Save receipt record
+  // Save receipt record — store both foreign and AUD amounts
   const receipt = {
     id: receiptId,
-    supplier, date, total, gst_amount: gst, net_amount: net,
+    supplier, date,
+    total: audTotal,
+    gst_amount: gst,
+    net_amount: net,
+    foreign_currency: currency !== 'AUD' ? currency : null,
+    foreign_amount:   currency !== 'AUD' ? rawTotal : null,
+    exchange_rate:    currency !== 'AUD' ? rate : null,
     description: desc, account, type,
     file_url: fileUrl,
     entry_id: null,
@@ -292,9 +366,8 @@ async function saveReceiptEntry() {
     created_at: new Date().toISOString(),
   };
 
-  // Create the accounting entry
+  // Create the accounting entry — always use AUD amounts
   if (type === 'bill') {
-    // Create a bill
     const bill = {
       id: uid(),
       number: 'RCPT-' + receiptId.slice(0,6).toUpperCase(),
@@ -302,14 +375,14 @@ async function saveReceiptEntry() {
       bill_date: date,
       due_date: date,
       status: 'received',
-      notes: `Receipt: ${supplier}`,
+      notes: `Receipt: ${supplier}${currency !== 'AUD' ? ` (${currency} ${rawTotal} @ ${rate})` : ''}`,
       subtotal: net,
       gst_total: gst,
-      total,
+      total: audTotal,
       lines: [{
         id: uid(), description: desc || supplier,
         qty: 1, unit_price: net, gst: gst > 0 ? 'yes' : 'no',
-        subtotal: net, gst_amount: gst, total,
+        subtotal: net, gst_amount: gst, total: audTotal,
       }],
       receipt_id: receiptId,
       created_at: new Date().toISOString(),
@@ -321,11 +394,10 @@ async function saveReceiptEntry() {
     toast('✓ Bill created from receipt');
 
   } else {
-    // Create transaction (direct or petty cash)
     const creditAccount = type === 'petty' ? '1015' : payAcct;
     const debits = gst > 0
       ? [{ account, amount: net }, { account: '1030', amount: gst }]
-      : [{ account, amount: total }];
+      : [{ account, amount: audTotal }];
 
     const tx = {
       id: uid(), date,
@@ -333,7 +405,7 @@ async function saveReceiptEntry() {
       desc: desc || supplier,
       type: 'journal',
       debits,
-      credits: [{ account: creditAccount, amount: total }],
+      credits: [{ account: creditAccount, amount: audTotal }],
       amount: total,
       gst: gst > 0 ? 'yes' : 'no',
       method: type === 'petty' ? 'Petty Cash' : 'Bank',
