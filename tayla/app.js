@@ -920,14 +920,14 @@ function updateGstPreview() {
 
   if (isGstDebit) {
     const totalNet = rawDebits.reduce((s, d) => { const a = getAccount(d.account); return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true)) ? s + d.amount : s; }, 0);
-    const gst      = +(totalNet / 9).toFixed(2);
+    const gst      = +(totalNet * 0.1).toFixed(2);
     const gross    = +(totalNet + gst).toFixed(2);
     injectGstLine('debit', { account: '1030', amount: gst });
     preview.style.display = 'block';
     preview.innerHTML = `✓ GST line added below — Net: <strong>${fmt(totalNet)}</strong> + GST: <strong>${fmt(gst)}</strong> = Gross: <strong>${fmt(gross)}</strong>. Enter <strong>${fmt(gross)}</strong> as your credit (bank/payment). <span style="color:var(--text3);">GST amount is editable if rounding differs.</span>`;
   } else if (isGstCredit) {
     const totalNet = rawCredits.reduce((s, c) => { const a = getAccount(c.account); return a?.type === 'revenue' ? s + c.amount : s; }, 0);
-    const gst      = +(totalNet / 9).toFixed(2);
+    const gst      = +(totalNet * 0.1).toFixed(2);
     const gross    = +(totalNet + gst).toFixed(2);
     injectGstLine('credit', { account: '2020', amount: gst });
     preview.style.display = 'block';
@@ -1181,19 +1181,19 @@ function updateJournalGstPreview() {
 
   const outputLines = [];
   // Calculate total GST for grossing up bank lines
-  const totalGstDebit  = rawLines.reduce((s, l) => { const a = getAccount(l.accountId); return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true)) && l.debit  > 0 ? s + +(l.debit  / 9).toFixed(2) : s; }, 0);
-  const totalGstCredit = rawLines.reduce((s, l) => { const a = getAccount(l.accountId); return a?.type === 'revenue' && l.credit > 0 ? s + +(l.credit / 9).toFixed(2) : s; }, 0);
+  const totalGstDebit  = rawLines.reduce((s, l) => { const a = getAccount(l.accountId); return (a?.type === 'expense' || (a?.type === 'asset' && a?.gst === true)) && l.debit  > 0 ? s + +(l.debit * 0.1).toFixed(2) : s; }, 0);
+  const totalGstCredit = rawLines.reduce((s, l) => { const a = getAccount(l.accountId); return a?.type === 'revenue' && l.credit > 0 ? s + +(l.credit * 0.1).toFixed(2) : s; }, 0);
 
   rawLines.forEach(l => {
     const acc = getAccount(l.accountId);
     const name = acc?.name || l.accountId;
     const isGstDebitAccount = acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true);
     if (isGstDebitAccount && l.debit > 0) {
-      const gst = +(l.debit / 9).toFixed(2);
+      const gst = +(l.debit * 0.1).toFixed(2);
       outputLines.push(`DR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(l.debit)}</strong> (net)`);
       outputLines.push(`DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
     } else if (acc?.type === 'revenue' && l.credit > 0) {
-      const gst = +(l.credit / 9).toFixed(2);
+      const gst = +(l.credit * 0.1).toFixed(2);
       outputLines.push(`CR &nbsp;${l.accountId} ${name} &nbsp;&nbsp;<strong>${fmt(l.credit)}</strong> (net)`);
       outputLines.push(`CR &nbsp;2020 GST Payable &nbsp;&nbsp;<strong>${fmt(gst)}</strong>`);
     } else if (acc?.type === 'asset' && !acc?.gst && l.credit > 0 && totalGstDebit > 0) {
@@ -1251,11 +1251,11 @@ function saveJournal() {
       const acc = getAccount(l.accountId);
       const isGstDebitAccount = acc?.type === 'expense' || (acc?.type === 'asset' && acc?.gst === true);
       if (isGstDebitAccount && l.debit > 0) {
-        const gst = +(l.debit / 9).toFixed(2);
+        const gst = +(l.debit * 0.1).toFixed(2);
         gstDebit += gst;
         finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: l.debit, credit: 0 });
       } else if (acc?.type === 'revenue' && l.credit > 0) {
-        const gst = +(l.credit / 9).toFixed(2);
+        const gst = +(l.credit * 0.1).toFixed(2);
         gstCredit += gst;
         finalLines.push({ accountId: l.accountId, accountName: l.accountName, debit: 0, credit: l.credit });
       } else if ((acc?.type === 'asset' && !acc?.gst) && l.credit > 0 && gstDebit > 0) {
