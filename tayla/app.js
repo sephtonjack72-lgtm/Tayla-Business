@@ -2354,31 +2354,48 @@ function deleteLiability(id) {
 function renderGST() {
   let gstCollected = 0, gstPaid = 0;
   const outputEntries = [], inputEntries = [];
-  
+
   transactions.forEach(t => {
-    const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
-    const netAmt = t.amount - gstAmt;
-    
     if (t.type === 'income' && t.gst === 'yes') {
+      const gstAmt = +(t.amount / 11).toFixed(2);
+      const netAmt = +(t.amount - gstAmt).toFixed(2);
       gstCollected += gstAmt;
       outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: netAmt, gst: gstAmt, total: t.amount });
+
     } else if (t.type === 'expense' && t.gst === 'yes') {
+      const gstAmt = +(t.amount / 11).toFixed(2);
+      const netAmt = +(t.amount - gstAmt).toFixed(2);
       gstPaid += gstAmt;
       inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: netAmt, gst: gstAmt, total: t.amount });
+
+    } else if (t.type === 'journal' && t.gst === 'yes') {
+      // Scan debit/credit lines for GST accounts
+      (t.credits || []).forEach(c => {
+        if (c.account === '2020') {
+          gstCollected += c.amount;
+          outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: +(c.amount * 10).toFixed(2), gst: c.amount, total: +(c.amount * 11).toFixed(2) });
+        }
+      });
+      (t.debits || []).forEach(d => {
+        if (d.account === '1030') {
+          gstPaid += d.amount;
+          inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: +(d.amount * 10).toFixed(2), gst: d.amount, total: +(d.amount * 11).toFixed(2) });
+        }
+      });
     }
   });
-  
-  // Also check journal entries for GST accounts
+
+  // Also check general journals for GST accounts
   journals.forEach(j => {
     j.lines.forEach(line => {
       const acc = getAccount(line.accountId);
-      if (acc && acc.id === '2020' && line.credit > 0) {
+      if (acc?.id === '2020' && line.credit > 0) {
         gstCollected += line.credit;
-        outputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: line.credit * 10, gst: line.credit, total: line.credit * 11 });
+        outputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: +(line.credit * 10).toFixed(2), gst: line.credit, total: +(line.credit * 11).toFixed(2) });
       }
-      if (acc && acc.id === '1030' && line.debit > 0) {
+      if (acc?.id === '1030' && line.debit > 0) {
         gstPaid += line.debit;
-        inputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: line.debit * 10, gst: line.debit, total: line.debit * 11 });
+        inputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: +(line.debit * 10).toFixed(2), gst: line.debit, total: +(line.debit * 11).toFixed(2) });
       }
     });
   });
