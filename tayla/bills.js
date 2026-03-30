@@ -326,6 +326,9 @@ function openMarkBillPaid(billId) {
 }
 
 async function confirmBillPaid() {
+  const btn = document.querySelector('#mark-bill-paid-modal .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
   const billId  = document.getElementById('bill-paid-id').value;
   const date    = document.getElementById('bill-paid-date').value;
   const amount  = parseFloat(document.getElementById('bill-paid-amount').value);
@@ -333,7 +336,12 @@ async function confirmBillPaid() {
   const credit  = document.getElementById('bill-paid-credit').value;
   const ref     = document.getElementById('bill-paid-ref').value.trim();
   const desc    = document.getElementById('bill-paid-desc').value.trim();
-  if (!date || isNaN(amount)) { toast('Please fill in date and amount'); return; }
+
+  if (!date || isNaN(amount)) {
+    toast('Please fill in date and amount');
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
+    return;
+  }
 
   const tx = {
     id: uid(), date, ref, desc,
@@ -342,17 +350,27 @@ async function confirmBillPaid() {
     credits: [{ account: credit, amount }],
     amount, gst: 'no', method: 'Bank', reconciled: false,
   };
+
+  // Prevent duplicate — check if this bill already has a transaction
+  const existingBill = bills.find(b => b.id === billId);
+  if (existingBill?.transaction_id) {
+    toast('This bill has already been marked as paid');
+    closeModal('mark-bill-paid-modal');
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
+    return;
+  }
+
   transactions.unshift(tx);
   await dbSaveTransaction(tx);
 
-  const bill = bills.find(b => b.id === billId);
-  if (bill) {
-    bill.status = 'paid';
-    bill.paid_date = date;
-    bill.transaction_id = tx.id;
-    await dbSaveBill(bill);
+  if (existingBill) {
+    existingBill.status = 'paid';
+    existingBill.paid_date = date;
+    existingBill.transaction_id = tx.id;
+    await dbSaveBill(existingBill);
   }
 
+  if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
   closeModal('mark-bill-paid-modal');
   renderBillList();
   renderBillKpis();
