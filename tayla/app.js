@@ -97,6 +97,7 @@ function applyProfileToApp(profile) {
       if (typeof dbLoadInvoices    === 'function') dbLoadInvoices();
       if (typeof dbLoadBills       === 'function') dbLoadBills();
       if (typeof dbLoadFixedAssets === 'function') dbLoadFixedAssets();
+      if (typeof dbLoadReceipts    === 'function') dbLoadReceipts();
       renderAll();
     });
   });
@@ -531,6 +532,7 @@ const CHART_OF_ACCOUNTS = {
     code: '1',
     accounts: [
       { id: '1010', name: 'Cash at Bank',                   type: 'asset', gst: false },
+      { id: '1015', name: 'Petty Cash',                       type: 'asset', gst: false },
       { id: '1020', name: 'Accounts Receivable',             type: 'asset', gst: false },
       { id: '1030', name: 'GST Receivable',                  type: 'asset', gst: false },
       { id: '1100', name: 'Inventory',                       type: 'asset', gst: true  },
@@ -707,10 +709,11 @@ function showPage(id) {
   } else {
     event.currentTarget.classList.add('active');
   }
-  if (id === 'reconcile-page' && typeof showReconTab  === 'function') showReconTab('accounts');
-  if (id === 'invoices-page'  && typeof showInvTab    === 'function') showInvTab('list');
-  if (id === 'bills-page'     && typeof showBillTab   === 'function') showBillTab('list');
-  if (id === 'assets-page'    && typeof showAssetTab  === 'function') showAssetTab('register');
+  if (id === 'reconcile-page' && typeof showReconTab   === 'function') showReconTab('accounts');
+  if (id === 'invoices-page'  && typeof showInvTab     === 'function') showInvTab('list');
+  if (id === 'bills-page'     && typeof showBillTab    === 'function') showBillTab('list');
+  if (id === 'assets-page'    && typeof showAssetTab   === 'function') showAssetTab('register');
+  if (id === 'receipts-page'  && typeof showReceiptTab === 'function') showReceiptTab('upload');
   renderAll();
 }
 
