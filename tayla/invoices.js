@@ -27,7 +27,10 @@ async function dbSaveContact(contact) {
   if (!_businessId) return;
   const { error } = await _supabase
     .from('contacts').upsert({ ...contact, business_id: _businessId }, { onConflict: 'id' });
-  if (error) console.error('Save contact failed:', error);
+  if (error) {
+    console.error('Save contact failed:', error);
+    toast('⚠ Contact saved locally but failed to sync: ' + error.message);
+  }
 }
 
 async function dbDeleteContact(id) {
@@ -62,14 +65,21 @@ async function dbSaveInvoice(invoice) {
   // Upsert header
   const { error: hErr } = await _supabase
     .from('invoices').upsert({ ...header, business_id: _businessId }, { onConflict: 'id' });
-  if (hErr) { console.error('Save invoice failed:', hErr); return; }
+  if (hErr) {
+    console.error('Save invoice failed:', hErr);
+    toast('⚠ Invoice saved locally but failed to sync: ' + hErr.message);
+    return;
+  }
 
   // Replace lines
   await _supabase.from('invoice_lines').delete().eq('invoice_id', invoice.id);
   if (lines?.length) {
     const rows = lines.map((l, i) => ({ ...l, id: l.id || uid(), invoice_id: invoice.id, sort_order: i }));
     const { error: lErr } = await _supabase.from('invoice_lines').insert(rows);
-    if (lErr) console.error('Save invoice lines failed:', lErr);
+    if (lErr) {
+      console.error('Save invoice lines failed:', lErr);
+      toast('⚠ Invoice lines failed to sync: ' + lErr.message);
+    }
   }
 }
 
@@ -531,6 +541,9 @@ function openMarkPaid(invoiceId) {
 }
 
 async function confirmMarkPaid() {
+  const btn = document.querySelector('#mark-paid-modal .btn-accent');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
   const invoiceId = document.getElementById('paid-invoice-id').value;
   const date      = document.getElementById('paid-date').value;
   const amount    = parseFloat(document.getElementById('paid-amount').value);
@@ -539,34 +552,44 @@ async function confirmMarkPaid() {
   const ref       = document.getElementById('paid-ref').value.trim();
   const desc      = document.getElementById('paid-desc').value.trim();
 
-  if (!date || isNaN(amount)) { toast('Please fill in date and amount'); return; }
+  if (!date || isNaN(amount)) {
+    toast('Please fill in date and amount');
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
+    return;
+  }
 
-  // Create ledger transaction
+  // Prevent duplicate
+  const existingInv = invoices.find(i => i.id === invoiceId);
+  if (existingInv?.transaction_id) {
+    toast('This invoice has already been marked as paid');
+    closeModal('mark-paid-modal');
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
+    return;
+  }
+
   const tx = {
     id: uid(), date, ref, desc,
     type: 'journal',
     debits:  [{ account: debitAcc,  amount }],
     credits: [{ account: creditAcc, amount }],
-    amount, gst: 'no', method: 'Bank',
-    reconciled: false,
+    amount, gst: 'no', method: 'Bank', reconciled: false,
   };
   transactions.unshift(tx);
   await dbSaveTransaction(tx);
 
-  // Update invoice status
-  const inv = invoices.find(i => i.id === invoiceId);
-  if (inv) {
-    inv.status = 'paid';
-    inv.paid_date = date;
-    inv.transaction_id = tx.id;
-    await dbSaveInvoice(inv);
+  if (existingInv) {
+    existingInv.status = 'paid';
+    existingInv.paid_date = date;
+    existingInv.transaction_id = tx.id;
+    await dbSaveInvoice(existingInv);
   }
 
+  if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
   closeModal('mark-paid-modal');
   renderInvoiceList();
   renderInvKpis();
   renderAll();
-  toast(`✓ Marked paid — transaction created`);
+  toast('✓ Marked paid — transaction created');
 }
 
 // ══════════════════════════════════════════════════════
