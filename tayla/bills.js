@@ -219,7 +219,7 @@ function addBillLine(data = {}) {
   const unit_price = data.unit_price ?? '';
   const gst        = data.gst ?? 'yes';
   const subtotal   = (parseFloat(qty) || 0) * (parseFloat(unit_price) || 0);
-  const autoGst    = data.gst_amount != null ? data.gst_amount : (gst === 'yes' ? +(subtotal / 9).toFixed(2) : 0);
+  const autoGst    = data.gst_amount != null ? data.gst_amount : (gst === 'yes' ? +(subtotal * 0.1).toFixed(2) : 0);
 
   const div = document.createElement('div');
   div.className = 'inv-line-row';
@@ -261,7 +261,7 @@ function recalcBillLineGst(el) {
   const price  = parseFloat(inputs[2]?.value) || 0;
   const gst    = select?.value || 'yes';
   const sub    = qty * price;
-  const gstAmt = gst === 'yes' ? +(sub / 9).toFixed(2) : 0;
+  const gstAmt = gst === 'yes' ? +(sub * 0.1).toFixed(2) : 0;
   const gstInput = row.querySelector('.bill-gst-input');
   if (gstInput) gstInput.value = gstAmt;
 }
@@ -281,7 +281,7 @@ function getBillLines() {
     const unit_price = parseFloat(inputs[2].value) || 0;
     const gst        = select?.value || 'yes';
     const subtotal   = +(qty * unit_price).toFixed(2);
-    const gst_amount = gst === 'yes' ? +(parseFloat(gstInput?.value) || subtotal / 9).toFixed(2) : 0;
+    const gst_amount = gst === 'yes' ? +(parseFloat(gstInput?.value) || subtotal * 0.1).toFixed(2) : 0;
     return { id: uid(), description: inputs[0].value.trim(), qty, unit_price, gst, subtotal, gst_amount, total: +(subtotal + gst_amount).toFixed(2) };
   }).filter(l => l.description || l.unit_price > 0);
 }
