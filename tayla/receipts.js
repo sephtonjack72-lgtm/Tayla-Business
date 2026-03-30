@@ -132,66 +132,27 @@ async function analyseReceipt() {
   document.getElementById('rcpt-review-card').style.display    = 'none';
 
   try {
-    const isImage = _currentReceiptFile.type.startsWith('image/');
     const base64Data = _currentReceiptBase64.split(',')[1];
     const mediaType  = _currentReceiptFile.type;
 
-    const messages = [{
-      role: 'user',
-      content: [
-        {
-          type: isImage ? 'image' : 'document',
-          source: { type: 'base64', media_type: mediaType, data: base64Data }
+    const response = await fetch(
+      'https://vyikolylJzygmxiahcul.supabase.co/functions/v1/analyse-receipt',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON}`,
         },
-        {
-          type: 'text',
-          text: `You are an Australian accounting assistant. Extract information from this receipt or invoice and return ONLY a JSON object (no markdown, no explanation) with these exact fields:
-{
-  "supplier": "business name on the receipt",
-  "date": "YYYY-MM-DD format",
-  "total": number (total amount inc GST),
-  "gst": number (GST amount — look for GST line, or calculate as total/11 if GST registered),
-  "net": number (total minus GST),
-  "description": "brief description of what was purchased",
-  "account": "one of: 5010, 5020, 5030, 5040, 5050, 5060, 5070, 5080, 5090, 5100, 5110",
-  "account_name": "matching account name",
-  "confidence": "high/medium/low"
-}
+        body: JSON.stringify({ base64: base64Data, mediaType }),
+      }
+    );
 
-Account codes:
-5010 Marketing & Advertising
-5020 Software Subscriptions  
-5030 Hosting & Infrastructure
-5040 Salaries & Wages
-5050 Rent
-5060 Depreciation Expense
-5070 Bank Charges
-5080 Business Setup Costs
-5090 Domain & Registration
-5100 Motor Vehicle Expenses
-5110 Professional Fees
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
 
-If you cannot read a value clearly, use null. Australian GST is 10% (1/11th of GST-inclusive price).`
-        }
-      ]
-    }];
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages,
-      })
-    });
-
-    const data = await response.json();
-    const text = data.content?.find(b => b.type === 'text')?.text || '';
-
-    // Parse JSON from response
-    const clean = text.replace(/```json|```/g, '').trim();
-    const extracted = JSON.parse(clean);
+    const extracted = await response.json();
 
     document.getElementById('rcpt-analysing').style.display = 'none';
     populateRcptReviewForm(extracted);
@@ -200,8 +161,7 @@ If you cannot read a value clearly, use null. Australian GST is 10% (1/11th of G
     console.error('AI analysis failed:', err);
     document.getElementById('rcpt-analysing').style.display = 'none';
     document.getElementById('rcpt-analyse-btn').style.display = 'block';
-    showRcptError('AI analysis failed — please fill in the details manually.');
-    // Show the form anyway for manual entry
+    showRcptError('AI analysis failed: ' + err.message + ' — please fill in the details manually.');
     populateRcptReviewForm({});
   }
 }
