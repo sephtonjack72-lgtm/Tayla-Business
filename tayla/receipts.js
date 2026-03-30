@@ -82,9 +82,9 @@ function handleReceiptFile(input) {
 }
 
 function processReceiptFile(file) {
-  const allowed = ['image/jpeg','image/png','image/webp','image/heic','application/pdf'];
+  const allowed = ['image/jpeg','image/png','image/webp','image/heic'];
   if (!allowed.includes(file.type)) {
-    showRcptError('Please upload a JPG, PNG, WebP or PDF file.');
+    showRcptError('Please upload a JPG, PNG or WebP image. PDF receipts are not supported yet — take a photo of the receipt instead.');
     return;
   }
   if (file.size > 10 * 1024 * 1024) {
