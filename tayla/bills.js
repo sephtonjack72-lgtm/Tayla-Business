@@ -317,11 +317,34 @@ function openMarkBillPaid(billId) {
   const bill    = bills.find(b => b.id === billId);
   const contact = contacts.find(c => c.id === bill?.contact_id);
   if (!bill) return;
-  document.getElementById('bill-paid-id').value      = billId;
-  document.getElementById('bill-paid-date').valueAsDate = new Date();
-  document.getElementById('bill-paid-amount').value  = bill.total;
-  document.getElementById('bill-paid-ref').value     = bill.number || '';
-  document.getElementById('bill-paid-desc').value    = `Payment — ${bill.number || 'Bill'}${contact ? ' · ' + contact.name : ''}`;
+
+  const hasGst   = (bill.gst_total || 0) > 0;
+  const netAmount = +(bill.subtotal || 0).toFixed(2);
+  const gstAmount = +(bill.gst_total || 0).toFixed(2);
+  const total     = +(bill.total || 0).toFixed(2);
+
+  document.getElementById('bill-paid-id').value         = billId;
+  document.getElementById('bill-paid-date').valueAsDate  = new Date();
+  document.getElementById('bill-paid-amount').value      = total;
+  document.getElementById('bill-paid-ref').value         = bill.number || '';
+  document.getElementById('bill-paid-desc').value        = `Payment — ${bill.number || 'Bill'}${contact ? ' · ' + contact.name : ''}`;
+
+  // Build journal preview
+  const previewEl = document.getElementById('bill-paid-journal-preview');
+  const linesEl   = document.getElementById('bill-paid-journal-lines');
+  previewEl.style.display = 'block';
+
+  let previewHtml = '';
+  if (hasGst) {
+    previewHtml += `DR &nbsp;[Expense Account] &nbsp;&nbsp;<strong>${fmt(netAmount)}</strong><br>`;
+    previewHtml += `DR &nbsp;1030 GST Receivable &nbsp;&nbsp;<strong>${fmt(gstAmount)}</strong><br>`;
+    previewHtml += `CR &nbsp;1010 Cash at Bank &nbsp;&nbsp;<strong>${fmt(total)}</strong>`;
+  } else {
+    previewHtml += `DR &nbsp;[Expense Account] &nbsp;&nbsp;<strong>${fmt(total)}</strong><br>`;
+    previewHtml += `CR &nbsp;1010 Cash at Bank &nbsp;&nbsp;<strong>${fmt(total)}</strong>`;
+  }
+  linesEl.innerHTML = previewHtml;
+
   document.getElementById('mark-bill-paid-modal').classList.add('show');
 }
 
@@ -343,15 +366,7 @@ async function confirmBillPaid() {
     return;
   }
 
-  const tx = {
-    id: uid(), date, ref, desc,
-    type: 'journal',
-    debits:  [{ account: debit,  amount }],
-    credits: [{ account: credit, amount }],
-    amount, gst: 'no', method: 'Bank', reconciled: false,
-  };
-
-  // Prevent duplicate — check if this bill already has a transaction
+  // Prevent duplicate
   const existingBill = bills.find(b => b.id === billId);
   if (existingBill?.transaction_id) {
     toast('This bill has already been marked as paid');
@@ -359,6 +374,23 @@ async function confirmBillPaid() {
     if (btn) { btn.disabled = false; btn.textContent = '✓ Mark Paid & Save Transaction'; }
     return;
   }
+
+  // Build debits — split GST if bill has GST
+  const hasGst    = (existingBill?.gst_total || 0) > 0;
+  const gstAmount = +(existingBill?.gst_total || 0).toFixed(2);
+  const netAmount = +(amount - gstAmount).toFixed(2);
+
+  const debits = hasGst
+    ? [{ account: debit, amount: netAmount }, { account: '1030', amount: gstAmount }]
+    : [{ account: debit, amount }];
+
+  const tx = {
+    id: uid(), date, ref, desc,
+    type: 'journal',
+    debits,
+    credits: [{ account: credit, amount }],
+    amount, gst: hasGst ? 'yes' : 'no', method: 'Bank', reconciled: false,
+  };
 
   transactions.unshift(tx);
   await dbSaveTransaction(tx);
