@@ -335,7 +335,7 @@ function getInvLines() {
     const unit_price = parseFloat(inputs[2].value) || 0;
     const gst        = select?.value || 'yes';
     const subtotal   = +(qty * unit_price).toFixed(2);
-    const gst_amount = gst === 'yes' ? +(subtotal / 9).toFixed(2) : 0;
+    const gst_amount = gst === 'yes' ? +(subtotal * 0.1).toFixed(2) : 0;
     const total      = +(subtotal + gst_amount).toFixed(2);
     return { id: uid(), description: desc, qty, unit_price, gst, subtotal, gst_amount, total };
   }).filter(l => l.description || l.unit_price > 0);
@@ -351,7 +351,7 @@ function renderInvSummary() {
     const price   = parseFloat(inputs[2]?.value) || 0;
     const gst     = select?.value || 'yes';
     const sub     = qty * price;
-    const gstAmt  = gst === 'yes' ? sub / 9 : 0;
+    const gstAmt  = gst === 'yes' ? sub * 0.1 : 0;
     const total   = sub + gstAmt;
     const totalEl = row.querySelector('.inv-line-total');
     if (totalEl) totalEl.textContent = fmt(total);
