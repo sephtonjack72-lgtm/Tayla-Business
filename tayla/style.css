@@ -349,3 +349,8 @@
 /* ── RECEIPTS ── */
 .rcpt-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
 .rcpt-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
+
+/* ── IMPORT */
+.import-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
+.import-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
+.import-mapping-row { display:grid;gap:8px;align-items:center;margin-bottom:8px;font-size:13px; }
