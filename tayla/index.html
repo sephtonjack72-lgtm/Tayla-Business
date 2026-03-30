@@ -320,12 +320,17 @@
       <div class="dropdown-item" onclick="showPage('gst');closeReportsMenu()">GST</div>
       <div class="dropdown-item" onclick="showPage('users-page');closeReportsMenu()">Users</div>
       <div class="dropdown-item" onclick="showPage('tax-page');closeReportsMenu()">Tax</div>
+      <div class="dropdown-item" onclick="showPage('assets-page');closeReportsMenu()">Asset Register</div>
     </div>
   </div>
   <div class="tab" onclick="showPage('reconcile-page')">⇄ Reconcile</div>
-  <div class="tab" onclick="showPage('invoices-page')">🧾 Invoices</div>
-  <div class="tab" onclick="showPage('bills-page')">📥 Bills</div>
-  <div class="tab" onclick="showPage('assets-page')">🏗 Assets</div>
+  <div class="tab tab-dropdown" id="invoices-tab">
+    <span onclick="toggleInvoicesMenu(event)">🧾 Invoices ▾</span>
+    <div class="dropdown-menu" id="invoices-menu">
+      <div class="dropdown-item" onclick="showPage('invoices-page');closeInvoicesMenu()">Invoices</div>
+      <div class="dropdown-item" onclick="showPage('bills-page');closeInvoicesMenu()">Bills</div>
+    </div>
+  </div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
