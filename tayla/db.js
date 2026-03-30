@@ -72,8 +72,13 @@ async function dbLoadAll() {
       .map(r => r.error).filter(Boolean);
     if (errors.length) throw errors[0];
 
-    // Remap description → desc for app compatibility
-    const txData = (txRes.data || []).map(({ description, ...rest }) => ({ ...rest, desc: description }));
+    // Remap description → desc for app compatibility, parse debits/credits
+    const txData = (txRes.data || []).map(({ description, debits, credits, ...rest }) => ({
+      ...rest,
+      desc: description,
+      debits:  typeof debits  === 'string' ? JSON.parse(debits)  : (debits  || []),
+      credits: typeof credits === 'string' ? JSON.parse(credits) : (credits || []),
+    }));
 
     const journalsData = (jRes.data || []).map(j => ({
       ...j,
@@ -138,7 +143,13 @@ async function dbSaveTransaction(tx) {
 
   if (!_businessId) return;
   const { desc, ...rest } = tx;
-  const row = { ...rest, description: desc, business_id: _businessId };
+  const row = {
+    ...rest,
+    description:  desc,
+    business_id:  _businessId,
+    debits:       tx.debits  ? JSON.stringify(tx.debits)  : null,
+    credits:      tx.credits ? JSON.stringify(tx.credits) : null,
+  };
   const { error } = await _supabase.from('transactions').upsert(row, { onConflict: 'id' });
   if (error) console.error('Transaction save failed:', error);
 }
