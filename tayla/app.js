@@ -505,14 +505,22 @@ async function updateSetup() {
 function toggleReportsMenu(e) {
     e.stopPropagation();
     document.getElementById('reports-menu').classList.toggle('open');
+    document.getElementById('invoices-menu').classList.remove('open');
   }
   function closeReportsMenu() {
     document.getElementById('reports-menu').classList.remove('open');
   }
+  function toggleInvoicesMenu(e) {
+    e.stopPropagation();
+    document.getElementById('invoices-menu').classList.toggle('open');
+    document.getElementById('reports-menu').classList.remove('open');
+  }
+  function closeInvoicesMenu() {
+    document.getElementById('invoices-menu').classList.remove('open');
+  }
   document.addEventListener('click', function(e) {
-    if (!document.getElementById('reports-tab').contains(e.target)) {
-      closeReportsMenu();
-    }
+    if (!document.getElementById('reports-tab').contains(e.target)) closeReportsMenu();
+    if (!document.getElementById('invoices-tab').contains(e.target)) closeInvoicesMenu();
   });
 
 // ══════════════════════════════════════════════════════
@@ -690,9 +698,12 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  const reportPages = ['income-stmt','balance-sheet','gst','users-page','tax-page'];
+  const reportPages  = ['income-stmt','balance-sheet','gst','users-page','tax-page','assets-page'];
+  const invoicePages = ['invoices-page','bills-page'];
   if (reportPages.includes(id)) {
     document.getElementById('reports-tab').classList.add('active');
+  } else if (invoicePages.includes(id)) {
+    document.getElementById('invoices-tab').classList.add('active');
   } else {
     event.currentTarget.classList.add('active');
   }
