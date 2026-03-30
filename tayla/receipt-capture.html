@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Receipts">
+<meta name="theme-color" content="#1a1a2e">
+<title>Tayla Receipts</title>
+<link rel="manifest" href="receipt-manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --accent:  #1a1a2e;
+    --accent2: #e8c547;
+    --accent3: #4f8ef7;
+    --bg:      #f7f5f2;
+    --surface: #ffffff;
+    --border:  #e2ddd6;
+    --text:    #1a1a2e;
+    --text2:   #5c5c7a;
+    --text3:   #9f9fba;
+    --danger:  #e53e3e;
+    --success: #38a169;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--accent);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; flex-direction: column; min-height: 100vh; min-height: -webkit-fill-available; }
+  .screen.active { display: flex; }
+
+  /* ── LOGIN SCREEN ── */
+  #screen-login {
+    background: var(--accent);
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+  }
+  .login-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 40px 28px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+  }
+  .logo { font-family: 'DM Serif Display', serif; font-size: 26px; color: var(--accent); margin-bottom: 4px; }
+  .logo span { color: var(--accent2); }
+  .logo-sub { font-size: 13px; color: var(--text3); margin-bottom: 32px; }
+
+  /* ── CAPTURE SCREEN ── */
+  #screen-capture { background: var(--accent); }
+
+  .capture-header {
+    padding: 16px 20px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .capture-logo { font-family: 'DM Serif Display', serif; font-size: 18px; color: #fff; }
+  .capture-logo span { color: var(--accent2); }
+
+  .capture-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  .preview-wrap {
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 4/3;
+    background: rgba(255,255,255,.05);
+    border: 2px dashed rgba(255,255,255,.2);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .preview-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 14px;
+  }
+  .preview-placeholder {
+    text-align: center;
+    color: rgba(255,255,255,.4);
+  }
+  .preview-placeholder div:first-child { font-size: 48px; margin-bottom: 10px; }
+  .preview-placeholder div:last-child  { font-size: 13px; }
+
+  .capture-btn {
+    width: 72px; height: 72px;
+    background: #fff;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.3);
+    transition: transform .1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .capture-btn:active { transform: scale(.93); }
+
+  .capture-hint { font-size: 12px; color: rgba(255,255,255,.4); text-align: center; }
+
+  /* ── REVIEW SCREEN ── */
+  #screen-review {
+    background: var(--bg);
+    overflow-y: auto;
+  }
+
+  .review-header {
+    background: var(--accent);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .back-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px;
+  }
+  .review-title { font-family: 'DM Serif Display', serif; font-size: 18px; color: #fff; flex: 1; }
+  .ai-badge {
+    font-size: 11px;
+    background: rgba(232,197,71,.2);
+    color: var(--accent2);
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-weight: 600;
+  }
+
+  .review-image {
+    width: 100%;
+    max-height: 200px;
+    object-fit: cover;
+  }
+
+  .review-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  .field-group { display: flex; flex-direction: column; gap: 6px; }
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    color: var(--text2);
+  }
+  .field-input {
+    padding: 12px 14px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    background: #fff;
+    color: var(--text);
+    width: 100%;
+    -webkit-appearance: none;
+  }
+  .field-input:focus { outline: none; border-color: var(--accent); }
+  select.field-input { appearance: none; -webkit-appearance: none; }
+
+  .amount-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .entry-type-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .entry-type-btn {
+    padding: 12px 8px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    text-align: center;
+    font-family: 'DM Sans', sans-serif;
+    transition: all .12s;
+  }
+  .entry-type-btn.selected {
+    border-color: var(--accent);
+    background: rgba(26,26,46,.04);
+  }
+  .entry-type-btn .et-icon { font-size: 22px; margin-bottom: 4px; }
+  .entry-type-btn .et-label { font-size: 11px; font-weight: 600; color: var(--text2); }
+
+  .save-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--accent2);
+    color: var(--accent);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background .15s;
+  }
+  .save-btn:active { background: #d4b03e; }
+  .save-btn:disabled { opacity: .6; }
+
+  /* ── SUCCESS SCREEN ── */
+  #screen-success {
+    background: var(--accent);
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    text-align: center;
+  }
+  .success-icon { font-size: 72px; margin-bottom: 20px; }
+  .success-title { font-family: 'DM Serif Display', serif; font-size: 28px; color: #fff; margin-bottom: 8px; }
+  .success-sub { font-size: 14px; color: rgba(255,255,255,.6); margin-bottom: 32px; line-height: 1.6; }
+
+  /* ── LOADING OVERLAY ── */
+  #loading-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(26,26,46,.85);
+    z-index: 999;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #loading-overlay.show { display: flex; }
+  .loading-spinner {
+    width: 48px; height: 48px;
+    border: 4px solid rgba(255,255,255,.2);
+    border-top-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #fff; font-size: 14px; }
+
+  /* ── SHARED FORM STYLES ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 12px 20px; border-radius: 10px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none;
+    font-family: 'DM Sans', sans-serif; transition: all .15s;
+    width: 100%; margin-bottom: 10px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:active { background: #2d2d4e; }
+  .btn-ghost { background: rgba(255,255,255,.1); color: #fff; }
+  .btn-ghost:active { background: rgba(255,255,255,.2); }
+
+  input, select { font-size: 16px !important; } /* prevent iOS zoom */
+
+  .error-msg {
+    padding: 12px 14px;
+    background: #fde2e2;
+    color: var(--danger);
+    border-radius: 8px;
+    font-size: 13px;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── LOADING OVERLAY ── -->
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loading-text">Reading receipt…</div>
+</div>
+
+<!-- ══════════════ LOGIN SCREEN ══════════════ -->
+<div class="screen active" id="screen-login">
+  <div class="login-card">
+    <div class="logo">Tayla <span>Receipts</span></div>
+    <div class="logo-sub">Sign in to capture receipts</div>
+
+    <div class="field-group" style="margin-bottom:12px;text-align:left;">
+      <label class="field-label">Email</label>
+      <input type="email" id="login-email" class="field-input" placeholder="you@example.com"
+        autocomplete="email" inputmode="email">
+    </div>
+    <div class="field-group" style="margin-bottom:20px;text-align:left;">
+      <label class="field-label">Password</label>
+      <input type="password" id="login-password" class="field-input" placeholder="Password"
+        autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login-error" class="error-msg" style="margin-bottom:14px;"></div>
+    <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Sign In</button>
+  </div>
+</div>
+
+<!-- ══════════════ CAPTURE SCREEN ══════════════ -->
+<div class="screen" id="screen-capture">
+  <div class="capture-header">
+    <div class="capture-logo">Tayla <span>Receipts</span></div>
+    <button onclick="doLogout()" style="background:none;border:none;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer;">Sign out</button>
+  </div>
+
+  <div class="capture-main">
+    <div class="preview-wrap" id="preview-wrap">
+      <div class="preview-placeholder" id="preview-placeholder">
+        <div>📷</div>
+        <div>Tap to capture a receipt</div>
+      </div>
+      <img id="preview-img" style="display:none;">
+    </div>
+
+    <button class="capture-btn" onclick="document.getElementById('camera-input').click()">📷</button>
+    <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;" onchange="handleCapture(this)">
+
+    <div class="capture-hint">Tap the button to open camera or choose from photos</div>
+
+    <button class="btn btn-ghost" id="analyse-btn" style="display:none;max-width:360px;" onclick="analyseCapture()">
+      🤖 Analyse with AI →
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════ REVIEW SCREEN ══════════════ -->
+<div class="screen" id="screen-review">
+  <div class="review-header">
+    <button class="back-btn" onclick="goBack()">←</button>
+    <div class="review-title">Review Receipt</div>
+    <span class="ai-badge" id="confidence-badge">AI extracted</span>
+  </div>
+
+  <img id="review-image" class="review-image" style="display:none;">
+
+  <div class="review-body">
+    <div class="field-group">
+      <label class="field-label">Supplier</label>
+      <input type="text" id="r-supplier" class="field-input" placeholder="e.g. Woolworths">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Date</label>
+      <input type="date" id="r-date" class="field-input">
+    </div>
+    <div class="amount-grid">
+      <div class="field-group">
+        <label class="field-label">Total (inc. GST)</label>
+        <input type="number" id="r-total" class="field-input" placeholder="0.00" step="0.01" inputmode="decimal" oninput="autoCalcGst()">
+      </div>
+      <div class="field-group">
+        <label class="field-label">GST Amount</label>
+        <input type="number" id="r-gst" class="field-input" placeholder="0.00" step="0.01" inputmode="decimal">
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Description</label>
+      <input type="text" id="r-desc" class="field-input" placeholder="What was this for?">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Expense Account</label>
+      <select id="r-account" class="field-input">
+        <option value="5010">5010 Marketing & Advertising</option>
+        <option value="5020">5020 Software Subscriptions</option>
+        <option value="5030">5030 Hosting & Infrastructure</option>
+        <option value="5040">5040 Salaries & Wages</option>
+        <option value="5050">5050 Rent</option>
+        <option value="5070">5070 Bank Charges</option>
+        <option value="5080">5080 Business Setup Costs</option>
+        <option value="5090">5090 Domain & Registration</option>
+        <option value="5100">5100 Motor Vehicle Expenses</option>
+        <option value="5110">5110 Professional Fees</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Entry Type</label>
+      <div class="entry-type-grid">
+        <button class="entry-type-btn selected" data-type="transaction" onclick="selectEntryType(this)">
+          <div class="et-icon">💳</div>
+          <div class="et-label">Transaction</div>
+        </button>
+        <button class="entry-type-btn" data-type="bill" onclick="selectEntryType(this)">
+          <div class="et-icon">📥</div>
+          <div class="et-label">Bill</div>
+        </button>
+        <button class="entry-type-btn" data-type="petty" onclick="selectEntryType(this)">
+          <div class="et-icon">💵</div>
+          <div class="et-label">Petty Cash</div>
+        </button>
+      </div>
+    </div>
+
+    <div id="review-error" class="error-msg"></div>
+    <button class="save-btn" id="save-btn" onclick="saveEntry()">✓ Save Entry</button>
+  </div>
+</div>
+
+<!-- ══════════════ SUCCESS SCREEN ══════════════ -->
+<div class="screen" id="screen-success">
+  <div class="success-icon">✅</div>
+  <div class="success-title">Receipt saved!</div>
+  <div class="success-sub" id="success-msg">Entry created in Tayla Business.</div>
+  <button class="btn btn-ghost" style="max-width:280px;" onclick="captureAnother()">📷 Capture Another</button>
+  <div style="margin-top:12px;font-size:12px;color:rgba(255,255,255,.3);">Opens in Tayla Business</div>
+</div>
+
+<script>
+// ── Config
+const SUPABASE_URL  = 'https://vyikolyljzygmxiahcul.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aWtvbHlsanp5Z214aWFoY3VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NzMyNDQsImV4cCI6MjA5MDM0OTI0NH0.v75aCYpDGlUgnaNFj3JE_clvVxmt2YAA_I9AYFABZII';
+const EDGE_URL      = 'https://vyikolyljzygmxiahcul.supabase.co/functions/v1/analyse-receipt';
+
+const _sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+let _user = null;
+let _businessId = null;
+let _capturedBase64 = null;
+let _capturedFile = null;
+let _entryType = 'transaction';
+
+function uid() { return Math.random().toString(36).slice(2, 10); }
+function fmt(n) { return '$' + Math.abs(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+// ── Screen management
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function showLoading(text = 'Loading…') {
+  document.getElementById('loading-text').textContent = text;
+  document.getElementById('loading-overlay').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('show');
+}
+
+// ── Auth
+document.addEventListener('DOMContentLoaded', async () => {
+  const { data: { session } } = await _sb.auth.getSession();
+  if (session) {
+    _user = session.user;
+    await loadBusiness();
+    showScreen('screen-capture');
+  }
+});
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw    = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  errEl.style.display = 'none';
+  if (!email || !pw) { errEl.textContent = 'Please enter email and password.'; errEl.style.display = 'block'; return; }
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  const { error } = await _sb.auth.signInWithPassword({ email, password: pw });
+  btn.textContent = 'Sign In'; btn.disabled = false;
+  if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+  _user = (await _sb.auth.getUser()).data.user;
+  await loadBusiness();
+  showScreen('screen-capture');
+}
+
+async function doLogout() {
+  await _sb.auth.signOut();
+  _user = null; _businessId = null;
+  showScreen('screen-login');
+}
+
+async function loadBusiness() {
+  if (!_user) return;
+  const { data } = await _sb.from('businesses').select('id').eq('user_id', _user.id).maybeSingle();
+  if (data) _businessId = data.id;
+}
+
+// ── Capture
+function handleCapture(input) {
+  const file = input.files[0];
+  if (!file) return;
+  _capturedFile = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _capturedBase64 = e.target.result;
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('preview-img').style.display = 'block';
+    document.getElementById('preview-placeholder').style.display = 'none';
+    document.getElementById('analyse-btn').style.display = 'flex';
+  };
+  reader.readAsDataURL(file);
+}
+
+function goBack() {
+  showScreen('screen-capture');
+}
+
+// ── AI Analysis
+async function analyseCapture() {
+  if (!_capturedBase64) return;
+  showLoading('Reading receipt with AI…');
+  try {
+    const compressed = await compressImage(_capturedBase64, 1024, 0.8);
+    const base64Data = compressed.split(',')[1];
+
+    const response = await fetch(EDGE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON}`,
+      },
+      body: JSON.stringify({ base64: base64Data, mediaType: 'image/jpeg' }),
+    });
+
+    hideLoading();
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Analysis failed');
+    }
+
+    const data = await response.json();
+    populateReview(data);
+    showScreen('screen-review');
+
+  } catch (err) {
+    hideLoading();
+    // Still go to review, just empty
+    populateReview({});
+    showScreen('screen-review');
+  }
+}
+
+function compressImage(base64, maxSize, quality) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxSize || height > maxSize) {
+        if (width > height) { height = Math.round(height * maxSize / width); width = maxSize; }
+        else { width = Math.round(width * maxSize / height); height = maxSize; }
+      }
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = base64;
+  });
+}
+
+function populateReview(data) {
+  document.getElementById('review-image').src = _capturedBase64;
+  document.getElementById('review-image').style.display = 'block';
+  document.getElementById('r-supplier').value = data.supplier || '';
+  document.getElementById('r-date').value     = data.date     || new Date().toISOString().split('T')[0];
+  document.getElementById('r-total').value    = data.total    || '';
+  document.getElementById('r-gst').value      = data.gst != null ? data.gst : '';
+  document.getElementById('r-desc').value     = data.description || '';
+  if (data.account) document.getElementById('r-account').value = data.account;
+
+  const badge = document.getElementById('confidence-badge');
+  const conf  = data.confidence || 'low';
+  badge.textContent = { high: '✓ High confidence', medium: '⚠ Check values', low: 'Fill in manually' }[conf];
+  badge.style.background = { high: 'rgba(56,161,105,.2)', medium: 'rgba(232,197,71,.2)', low: 'rgba(229,62,62,.2)' }[conf];
+  badge.style.color = { high: '#68d391', medium: var_accent2(), low: '#fc8181' }[conf];
+}
+
+function var_accent2() { return '#e8c547'; }
+
+function autoCalcGst() {
+  const total = parseFloat(document.getElementById('r-total').value) || 0;
+  document.getElementById('r-gst').value = total > 0 ? +(total / 11).toFixed(2) : '';
+}
+
+function selectEntryType(btn) {
+  document.querySelectorAll('.entry-type-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  _entryType = btn.dataset.type;
+}
+
+// ── Save
+async function saveEntry() {
+  const supplier = document.getElementById('r-supplier').value.trim();
+  const date     = document.getElementById('r-date').value;
+  const total    = parseFloat(document.getElementById('r-total').value) || 0;
+  const gst      = parseFloat(document.getElementById('r-gst').value)   || 0;
+  const net      = +(total - gst).toFixed(2);
+  const desc     = document.getElementById('r-desc').value.trim();
+  const account  = document.getElementById('r-account').value;
+  const errEl    = document.getElementById('review-error');
+  const btn      = document.getElementById('save-btn');
+  errEl.style.display = 'none';
+
+  if (!date || !total) { errEl.textContent = 'Date and amount are required.'; errEl.style.display = 'block'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+  showLoading('Saving entry…');
+
+  try {
+    const receiptId = uid();
+
+    // Upload image to Supabase Storage
+    let fileUrl = null;
+    if (_capturedFile && _businessId) {
+      const ext  = 'jpg';
+      const path = `${_businessId}/${receiptId}.${ext}`;
+      const blob = await (await fetch(_capturedBase64)).blob();
+      const { error: upErr } = await _sb.storage.from('receipts').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+      if (!upErr) {
+        const { data: urlData } = _sb.storage.from('receipts').getPublicUrl(path);
+        fileUrl = urlData?.publicUrl;
+      }
+    }
+
+    // Save receipt record
+    const receipt = {
+      id: receiptId,
+      business_id: _businessId,
+      supplier, receipt_date: date, total,
+      gst_amount: gst, net_amount: net,
+      description: desc, account, type: _entryType,
+      file_url: fileUrl, entry_id: null,
+      created_at: new Date().toISOString(),
+    };
+
+    // Create ledger entry
+    if (_entryType === 'bill') {
+      const bill = {
+        id: uid(), business_id: _businessId,
+        number: 'RCPT-' + receiptId.slice(0,6).toUpperCase(),
+        contact_id: null, bill_date: date, due_date: date,
+        status: 'received', notes: `Receipt: ${supplier}`,
+        subtotal: net, gst_total: gst, total,
+        lines: [{ id: uid(), description: desc || supplier, qty: 1, unit_price: net, gst: gst > 0 ? 'yes' : 'no', subtotal: net, gst_amount: gst, total }],
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      };
+      await _sb.from('bills').insert({ ...bill, lines: undefined });
+      receipt.entry_id = bill.id; receipt.entry_type = 'bill';
+    } else {
+      const creditAccount = _entryType === 'petty' ? '1015' : '1010';
+      const debits = gst > 0
+        ? [{ account, amount: net }, { account: '1030', amount: gst }]
+        : [{ account, amount: total }];
+      const tx = {
+        id: uid(), business_id: _businessId,
+        date, ref: 'RCPT-' + receiptId.slice(0,6).toUpperCase(),
+        description: desc || supplier, type: 'journal',
+        debits, credits: [{ account: creditAccount, amount: total }],
+        amount: total, gst: gst > 0 ? 'yes' : 'no',
+        method: _entryType === 'petty' ? 'Petty Cash' : 'Bank',
+        reconciled: false,
+      };
+      await _sb.from('transactions').insert(tx);
+      receipt.entry_id = tx.id; receipt.entry_type = 'transaction';
+    }
+
+    await _sb.from('receipts').insert(receipt);
+
+    hideLoading();
+    document.getElementById('success-msg').textContent =
+      `${_entryType === 'bill' ? 'Bill' : _entryType === 'petty' ? 'Petty cash entry' : 'Transaction'} created — ${supplier ? supplier + ' · ' : ''}${fmt(total)}`;
+    showScreen('screen-success');
+
+  } catch (err) {
+    hideLoading();
+    btn.disabled = false; btn.textContent = '✓ Save Entry';
+    errEl.textContent = 'Save failed: ' + err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function captureAnother() {
+  _capturedBase64 = null;
+  _capturedFile   = null;
+  document.getElementById('preview-img').style.display = 'none';
+  document.getElementById('preview-placeholder').style.display = 'block';
+  document.getElementById('analyse-btn').style.display = 'none';
+  document.getElementById('camera-input').value = '';
+  showScreen('screen-capture');
+}
+</script>
+
+</body>
+</html>
