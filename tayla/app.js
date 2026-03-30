@@ -2891,8 +2891,119 @@ function exportExcel() {
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gstData), 'GST');
 
-  XLSX.writeFile(wb, 'Tayla_Finance.xlsx');
+  // Contacts sheet
+  if (typeof contacts !== 'undefined' && contacts.length) {
+    const contactData = [['Name','Type','ABN','Email','Phone','Address']];
+    contacts.forEach(c => contactData.push([c.name, c.type, c.abn, c.email, c.phone, c.address]));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(contactData), 'Contacts');
+  }
+
+  // Invoices sheet
+  if (typeof invoices !== 'undefined' && invoices.length) {
+    const invData = [['Invoice #','Client','Issue Date','Due Date','Status','Subtotal','GST','Total']];
+    invoices.forEach(inv => {
+      const contact = typeof contacts !== 'undefined' ? contacts.find(c => c.id === inv.contact_id) : null;
+      invData.push([inv.number, contact?.name || '', inv.issue_date, inv.due_date, inv.status, inv.subtotal, inv.gst_total, inv.total]);
+      (inv.lines || []).forEach(l => invData.push(['', `  ${l.description}`, '', '', '', l.subtotal, l.gst_amount, l.total]));
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(invData), 'Invoices');
+  }
+
+  // Bills sheet
+  if (typeof bills !== 'undefined' && bills.length) {
+    const billData = [['Bill #','Supplier','Bill Date','Due Date','Status','Subtotal','GST','Total']];
+    bills.forEach(b => {
+      const contact = typeof contacts !== 'undefined' ? contacts.find(c => c.id === b.contact_id) : null;
+      billData.push([b.number, contact?.name || '', b.bill_date, b.due_date, b.status, b.subtotal, b.gst_total, b.total]);
+      (b.lines || []).forEach(l => billData.push(['', `  ${l.description}`, '', '', '', l.subtotal, l.gst_amount, l.total]));
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(billData), 'Bills');
+  }
+
+  // Fixed Assets sheet
+  if (typeof fixedAssets !== 'undefined' && fixedAssets.length) {
+    const fy = appSettings.defaultFY || '2026';
+    const assetData = [['Name','Category','Purchase Date','Cost','Method','Life (yrs)','Salvage','Acc. Depreciation','Book Value','Disposed']];
+    fixedAssets.forEach(a => {
+      const { accum, bookValue } = typeof calcDepreciation === 'function' ? calcDepreciation(a, fy) : { accum: 0, bookValue: a.cost };
+      assetData.push([a.name, a.category, a.purchase_date, a.cost, a.method, a.life, a.salvage, accum, bookValue, a.disposed ? 'Yes' : 'No']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(assetData), 'Fixed Assets');
+  }
+
+  // Receipts sheet
+  if (typeof receipts !== 'undefined' && receipts.length) {
+    const rcptData = [['Date','Supplier','Description','Currency','Foreign Amount','Exchange Rate','Total (AUD)','GST','Net','Type']];
+    receipts.forEach(r => rcptData.push([
+      r.receipt_date || r.date, r.supplier, r.description,
+      r.foreign_currency || 'AUD', r.foreign_amount || r.total,
+      r.exchange_rate || 1, r.total, r.gst_amount, r.net_amount, r.type
+    ]));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rcptData), 'Receipts');
+  }
+
+  XLSX.writeFile(wb, `TaylaBusiness_${new Date().toISOString().split('T')[0]}.xlsx`);
   toast('Excel exported ✓');
+}
+
+// ── Individual CSV downloads
+function downloadCSV(data, filename) {
+  const csv = data.map(row =>
+    row.map(cell => {
+      const val = cell == null ? '' : String(cell);
+      return val.includes(',') || val.includes('"') || val.includes('\n')
+        ? `"${val.replace(/"/g, '""')}"` : val;
+    }).join(',')
+  ).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  toast(`${filename} downloaded ✓`);
+}
+
+function exportTransactionsCSV() {
+  const data = [['Date','Reference','Description','Type','Amount','GST','Method','Debit Accounts','Credit Accounts']];
+  transactions.forEach(t => {
+    const debits  = (t.debits  || []).map(d => `${d.account}:${d.amount}`).join('; ');
+    const credits = (t.credits || []).map(c => `${c.account}:${c.amount}`).join('; ');
+    data.push([t.date, t.ref, t.desc, t.type, t.amount, t.gst, t.method, debits, credits]);
+  });
+  downloadCSV(data, `Transactions_${new Date().toISOString().split('T')[0]}.csv`);
+}
+
+function exportInvoicesCSV() {
+  const data = [['Invoice #','Client','Issue Date','Due Date','Status','Subtotal','GST','Total','Paid Date']];
+  (invoices || []).forEach(inv => {
+    const contact = (contacts || []).find(c => c.id === inv.contact_id);
+    data.push([inv.number, contact?.name || '', inv.issue_date, inv.due_date, inv.status, inv.subtotal, inv.gst_total, inv.total, inv.paid_date || '']);
+  });
+  downloadCSV(data, `Invoices_${new Date().toISOString().split('T')[0]}.csv`);
+}
+
+function exportBillsCSV() {
+  const data = [['Bill #','Supplier','Bill Date','Due Date','Status','Subtotal','GST','Total','Paid Date']];
+  (bills || []).forEach(b => {
+    const contact = (contacts || []).find(c => c.id === b.contact_id);
+    data.push([b.number, contact?.name || '', b.bill_date, b.due_date, b.status, b.subtotal, b.gst_total, b.total, b.paid_date || '']);
+  });
+  downloadCSV(data, `Bills_${new Date().toISOString().split('T')[0]}.csv`);
+}
+
+function exportContactsCSV() {
+  const data = [['Name','Type','ABN','Email','Phone','Address']];
+  (contacts || []).forEach(c => data.push([c.name, c.type, c.abn, c.email, c.phone, c.address]));
+  downloadCSV(data, `Contacts_${new Date().toISOString().split('T')[0]}.csv`);
+}
+
+function exportChartOfAccountsCSV() {
+  const data = [['Account Code','Account Name','Type','Balance']];
+  ALL_ACCOUNTS.forEach(acc => {
+    const bal = calculateAccountBalance(acc.id);
+    data.push([acc.id, acc.name, acc.type, bal.toFixed(2)]);
+  });
+  downloadCSV(data, `ChartOfAccounts_${new Date().toISOString().split('T')[0]}.csv`);
 }
 
 function calculateAccountBalance(accountId) {
