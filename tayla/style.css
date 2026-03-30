@@ -345,3 +345,7 @@
 /* ── ASSETS ── */
 .asset-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
 .asset-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
+
+/* ── RECEIPTS ── */
+.rcpt-tab.active { color: var(--accent) !important; border-bottom-color: var(--accent2) !important; }
+.rcpt-tab:hover  { color: var(--accent) !important; background: var(--surface2); }
