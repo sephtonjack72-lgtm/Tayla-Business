@@ -41,7 +41,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function afterLogin() {
-  // Check if business profile exists
+  // Check and activate any pending invites for this user
+  if (typeof checkPendingInvites === 'function') await checkPendingInvites();
+
+  // Load all businesses this user can access
+  if (typeof loadAllBusinesses === 'function') await loadAllBusinesses();
+
+  // Find the primary business (owned, or first accessible)
   const { data, error } = await _supabase
     .from('businesses')
     .select('*')
@@ -50,8 +56,19 @@ async function afterLogin() {
 
   if (data) {
     _businessProfile = data;
+    _userRole = 'owner';
+    _isReadOnly = false;
     applyProfileToApp(data);
     hideAllOverlays();
+  } else if (_allBusinesses.length > 0) {
+    // User has no owned business but has member access
+    const biz = _allBusinesses[0];
+    _businessProfile = biz;
+    _userRole = biz._role || 'accountant';
+    _isReadOnly = _userRole === 'accountant';
+    applyProfileToApp(biz);
+    hideAllOverlays();
+    if (typeof applyReadOnlyMode === 'function') applyReadOnlyMode();
   } else {
     // New user — show setup wizard
     showOverlay('setup');
@@ -98,6 +115,8 @@ function applyProfileToApp(profile) {
       if (typeof dbLoadBills       === 'function') dbLoadBills();
       if (typeof dbLoadFixedAssets === 'function') dbLoadFixedAssets();
       if (typeof dbLoadReceipts    === 'function') dbLoadReceipts();
+      if (typeof loadMembers       === 'function') loadMembers();
+      if (typeof initCurrencyUI    === 'function') initCurrencyUI();
       renderAll();
     });
   });
@@ -992,7 +1011,7 @@ function addTransactionDoubleEntry() {
 
   const totalAmount = debits.reduce((s, d) => s + d.amount, 0);
 
-  const newTx = {
+  let newTx = {
     id: uid(),
     date,
     ref: ref || 'TX-' + uid().slice(0,6),
@@ -1004,6 +1023,11 @@ function addTransactionDoubleEntry() {
     gst: gstOn ? 'yes' : 'no',
     method: 'Journal'
   };
+
+  // Apply currency conversion if multi-currency enabled
+  if (typeof applyCurrencyToTransaction === 'function') {
+    newTx = applyCurrencyToTransaction(newTx);
+  }
 
   transactions.unshift(newTx);
   dbSaveTransaction(newTx);
@@ -3092,25 +3116,31 @@ let appSettings = JSON.parse(localStorage.getItem('appSettings') || JSON.stringi
 }));
 
 function saveSettings() {
-  appSettings.bizModel      = document.getElementById('setting-biz-model')?.value || 'saas';
-  appSettings.bizName       = document.getElementById('setting-biz-name')?.value || '';
-  appSettings.defaultEntity = document.getElementById('setting-entity')?.value || 'sole_trader';
-  appSettings.defaultFY     = document.getElementById('setting-fy')?.value || '2026';
+  appSettings.bizModel       = document.getElementById('setting-biz-model')?.value || 'saas';
+  appSettings.bizName        = document.getElementById('setting-biz-name')?.value || '';
+  appSettings.defaultEntity  = document.getElementById('setting-entity')?.value || 'sole_trader';
+  appSettings.defaultFY      = document.getElementById('setting-fy')?.value || '2026';
+  appSettings.baseCurrency   = document.getElementById('setting-base-currency')?.value || 'AUD';
+  appSettings.multiCurrency  = document.getElementById('setting-multi-currency')?.value || 'no';
   localStorage.setItem('appSettings', JSON.stringify(appSettings));
+  if (typeof initCurrencyUI === 'function') initCurrencyUI();
 }
 
 function loadSettings() {
   const s = appSettings;
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-  set('setting-biz-model', s.bizModel);
-  set('setting-biz-name',  s.bizName);
-  set('setting-entity',    s.defaultEntity);
-  set('setting-fy',        s.defaultFY);
+  set('setting-biz-model',      s.bizModel);
+  set('setting-biz-name',       s.bizName);
+  set('setting-entity',         s.defaultEntity);
+  set('setting-fy',             s.defaultFY);
+  set('setting-base-currency',  s.baseCurrency   || 'AUD');
+  set('setting-multi-currency', s.multiCurrency  || 'no');
   const en = document.getElementById('entity-name');
   if (en && s.bizName) en.value = s.bizName;
   onBizModelChange();
   renderSoftwareSettings();
   renderSettingsProfilePreview();
+  if (typeof initCurrencyUI === 'function') initCurrencyUI();
 }
 
 function syncEntityName() {
