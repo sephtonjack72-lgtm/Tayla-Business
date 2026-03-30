@@ -963,28 +963,15 @@
     <div class="card-header">
       <div>
         <div class="card-title">Business Model</div>
-        <div class="text-sm">Configure your model type — this shapes categories, metrics and reporting throughout the tool.</div>
+        <div class="text-sm">Your business model shapes categories, metrics and reporting. Change it via Business Setup in the account menu.</div>
       </div>
     </div>
     <div class="card-body">
-      <div class="form-grid">
-        <div class="form-group">
-          <label>Model Type</label>
-          <select id="setting-biz-model" onchange="saveSettings();onBizModelChange()">
-            <option value="saas">💻 SaaS (Software as a Service)</option>
-            <option value="hospitality">🍽 Hospitality</option>
-            <option value="retail">🛍 Retail</option>
-            <option value="professional">💼 Professional Services</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Business Name</label>
-          <input type="text" id="setting-biz-name" placeholder="e.g. Tayla" oninput="saveSettings(); syncEntityName()">
-        </div>
-      </div>
-
-      <!-- Business model detail cards -->
-      <div id="model-detail-saas" style="margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
+      <!-- Hidden inputs so loadSettings/saveSettings still work -->
+      <input type="hidden" id="setting-biz-model">
+      <input type="hidden" id="setting-biz-name">
+      <!-- Read-only model detail cards -->
+      <div id="model-detail-saas" style="background:var(--surface2);border-radius:10px;padding:20px;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
           <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">SaaS</div>
           <div>
