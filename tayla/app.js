@@ -707,12 +707,16 @@ function showPage(id) {
 //  CATEGORY OPTIONS
 // ══════════════════════════════════════════════════════
 function updateCategoryOptions() {
-  const type = document.getElementById('tx-type').value;
+  const typeEl = document.getElementById('tx-type');
+  if (!typeEl) return;
+  const type = typeEl.value;
   const sel = document.getElementById('tx-category');
   buildCatOptions(sel, type);
 }
 function updateEditCats() {
-  const type = document.getElementById('edit-type').value;
+  const typeEl = document.getElementById('edit-type');
+  if (!typeEl) return;
+  const type = typeEl.value;
   const sel = document.getElementById('edit-category');
   buildCatOptions(sel, type);
 }
