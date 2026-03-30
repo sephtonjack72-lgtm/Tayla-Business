@@ -288,7 +288,32 @@
 </div>
 
 <header>
-  <div class="logo">Tayla <span>Business</span></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="logo">Tayla <span>Business</span></div>
+    <!-- Business switcher — shown when user has multiple businesses -->
+    <div id="biz-switcher-wrap" style="display:none;position:relative;">
+      <button onclick="toggleBizSwitcher()" style="
+        display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.1);
+        border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;
+        font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:500;
+      " id="biz-switcher-btn">
+        <span id="biz-switcher-name">Business</span> ▾
+      </button>
+      <div id="biz-switcher-menu" style="
+        display:none;position:absolute;top:calc(100% + 8px);left:0;
+        background:var(--surface);border:1px solid var(--border);border-radius:10px;
+        box-shadow:0 8px 24px rgba(26,26,46,0.15);min-width:220px;z-index:9999;overflow:hidden;
+      ">
+        <div style="padding:10px 16px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);border-bottom:1px solid var(--border);">Your Businesses</div>
+        <div id="biz-switcher-list"></div>
+        <div onclick="addNewBusiness()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--accent3);border-top:1px solid var(--border);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">+ Add Business</div>
+      </div>
+    </div>
+  </div>
+  <!-- Read-only banner for accountants -->
+  <div id="readonly-banner" style="display:none;background:rgba(232,197,71,.15);border:1px solid var(--accent2);border-radius:8px;padding:6px 14px;font-size:12px;color:var(--accent2);font-weight:500;">
+    👁 Accountant view — read only
+  </div>
   <div class="header-actions">
     <button class="btn btn-ghost" onclick="exportExcel()">⬇ Export Excel</button>
     <button class="btn btn-accent" onclick="exportPDF()">⬇ Export PDF</button>
@@ -300,7 +325,9 @@
         box-shadow:0 8px 24px rgba(26,26,46,0.15);min-width:200px;z-index:9999;overflow:hidden;
       ">
         <div id="user-email-display" style="padding:12px 16px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border);"></div>
-        <div onclick="openSetupWizard();toggleUserMenu()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">⚙ Business Setup</div>
+        <div id="user-role-display" style="display:none;padding:8px 16px;font-size:11px;color:var(--accent2);background:rgba(232,197,71,.08);border-bottom:1px solid var(--border);">👁 Accountant access</div>
+        <div onclick="openSetupWizard();toggleUserMenu()" id="menu-setup-item" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">⚙ Business Setup</div>
+        <div onclick="showPage('settings-page');showInvTab && showInvTab('list');document.getElementById('settings-members-section').scrollIntoView();toggleUserMenu();" id="menu-team-item" style="display:none;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">👥 Team Access</div>
         <div onclick="signOut()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--danger);border-top:1px solid var(--border);" onmouseover="this.style.background='#fde2e2'" onmouseout="this.style.background=''">→ Sign Out</div>
       </div>
     </div>
@@ -360,6 +387,27 @@
             <label>Description</label>
             <input type="text" id="tx-desc" placeholder="e.g. Meta Ads, Client payment...">
           </div>
+        </div>
+
+        <!-- Multi-currency row — hidden unless multi-currency enabled -->
+        <div id="tx-currency-row" style="display:none;margin-top:12px;padding:12px 14px;background:var(--surface2);border-radius:8px;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div class="form-group" style="flex:1;min-width:120px;margin:0;">
+            <label>Currency</label>
+            <select id="tx-currency" onchange="updateTxExchangeRate()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);">
+              <option value="AUD">AUD</option>
+              <option value="USD">USD</option>
+              <option value="NZD">NZD</option>
+              <option value="GBP">GBP</option>
+              <option value="EUR">EUR</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:1;min-width:120px;margin:0;">
+            <label>Exchange Rate (to AUD)</label>
+            <input type="number" id="tx-exchange-rate" value="1" step="0.0001" min="0.0001"
+              style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);"
+              oninput="updateTxCurrencyPreview()">
+          </div>
+          <div id="tx-currency-preview" style="font-size:12px;color:var(--text3);flex:1;min-width:120px;"></div>
         </div>
         
         <div style="margin-top:16px;">
@@ -973,6 +1021,60 @@
       </div>
       <div style="margin-top:12px;">
         <button class="btn btn-primary btn-sm" onclick="applyTaxDefaults()">Apply to Tax Tab</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Team Access -->
+  <div class="card section-gap" id="settings-members-section">
+    <div class="card-header flex-between">
+      <div>
+        <div class="card-title">Team Access</div>
+        <div class="text-sm">Invite an accountant or team member to view this business.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+        <input type="email" id="invite-email" placeholder="accountant@example.com" style="flex:1;min-width:200px;">
+        <select id="invite-role" style="padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
+          <option value="accountant">Accountant (read-only)</option>
+          <option value="admin">Admin (full access)</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="inviteMember()">Send Invite</button>
+      </div>
+      <div id="members-list">
+        <div style="font-size:13px;color:var(--text3);">No team members yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Currency -->
+  <div class="card section-gap">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Currency</div>
+        <div class="text-sm">Base currency for all reports. Foreign currency transactions are converted on entry.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Base Currency</label>
+          <select id="setting-base-currency" onchange="saveSettings()">
+            <option value="AUD">AUD — Australian Dollar</option>
+            <option value="USD">USD — US Dollar</option>
+            <option value="NZD">NZD — New Zealand Dollar</option>
+            <option value="GBP">GBP — British Pound</option>
+            <option value="EUR">EUR — Euro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Enable Multi-Currency</label>
+          <select id="setting-multi-currency" onchange="saveSettings()">
+            <option value="no">No — AUD only</option>
+            <option value="yes">Yes — allow foreign currency entries</option>
+          </select>
+        </div>
       </div>
     </div>
   </div>
@@ -2159,6 +2261,7 @@
 <script src="bills.js"></script>
 <script src="assets.js"></script>
 <script src="receipts.js"></script>
+<script src="members.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
