@@ -132,8 +132,17 @@ async function analyseReceipt() {
   document.getElementById('rcpt-review-card').style.display    = 'none';
 
   try {
-    const base64Data = _currentReceiptBase64.split(',')[1];
-    const mediaType  = _currentReceiptFile.type;
+    let base64Data, mediaType;
+
+    // Compress images before sending to keep payload small
+    if (_currentReceiptFile.type.startsWith('image/')) {
+      const compressed = await compressImage(_currentReceiptBase64, 1024, 0.8);
+      base64Data = compressed.split(',')[1];
+      mediaType  = 'image/jpeg';
+    } else {
+      base64Data = _currentReceiptBase64.split(',')[1];
+      mediaType  = _currentReceiptFile.type;
+    }
 
     const response = await fetch(
       'https://vyikolyljzygmxiahcul.supabase.co/functions/v1/analyse-receipt',
@@ -153,7 +162,6 @@ async function analyseReceipt() {
     }
 
     const extracted = await response.json();
-
     document.getElementById('rcpt-analysing').style.display = 'none';
     populateRcptReviewForm(extracted);
 
@@ -164,6 +172,25 @@ async function analyseReceipt() {
     showRcptError('AI analysis failed: ' + err.message + ' — please fill in the details manually.');
     populateRcptReviewForm({});
   }
+}
+
+function compressImage(base64, maxSize, quality) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxSize || height > maxSize) {
+        if (width > height) { height = Math.round(height * maxSize / width); width = maxSize; }
+        else { width = Math.round(width * maxSize / height); height = maxSize; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = base64;
+  });
 }
 
 function populateRcptReviewForm(data) {
