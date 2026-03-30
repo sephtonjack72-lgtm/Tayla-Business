@@ -8,7 +8,7 @@
 //  ⚠ Replace these with your actual project values
 //  from: supabase.com → Project Settings → API
 // ══════════════════════════════════════════════════════
-const SUPABASE_URL  = 'https://vyikolylJzygmxiahcul.supabase.co';
+const SUPABASE_URL  = 'https://vyikolyljzygmxiahcul.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5aWtvbHlsanp5Z214aWFoY3VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NzMyNDQsImV4cCI6MjA5MDM0OTI0NH0.v75aCYpDGlUgnaNFj3JE_clvVxmt2YAA_I9AYFABZII';
 
 const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
