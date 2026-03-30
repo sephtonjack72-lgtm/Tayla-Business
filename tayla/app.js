@@ -118,6 +118,8 @@ function applyProfileToApp(profile) {
       if (typeof loadMembers       === 'function') loadMembers();
       if (typeof initCurrencyUI    === 'function') initCurrencyUI();
       renderAll();
+      // Re-render software settings after data is available
+      setTimeout(() => renderSoftwareSettings(), 500);
     });
   });
 }
@@ -745,6 +747,7 @@ function showPage(id) {
   if (id === 'bills-page'     && typeof showBillTab    === 'function') showBillTab('list');
   if (id === 'assets-page'    && typeof showAssetTab   === 'function') showAssetTab('register');
   if (id === 'receipts-page'  && typeof showReceiptTab === 'function') showReceiptTab('upload');
+  if (id === 'settings-page') renderSoftwareSettings();
   renderAll();
 }
 
