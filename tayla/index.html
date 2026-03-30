@@ -284,6 +284,80 @@
       </div>
     </div>
 
+    <!-- Step 6: Import Data (optional) -->
+    <div id="setup-step-6" style="display:none;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:4px;">Import existing data</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px;">Migrating from Xero, MYOB or another system? Upload your CSV exports below. All imports are optional — skip any you don't need.</div>
+
+      <!-- Import tabs -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;">
+        <button class="import-tab active" id="itab-contacts"     onclick="showImportTab('contacts')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">👤 Contacts</button>
+        <button class="import-tab"        id="itab-accounts"     onclick="showImportTab('accounts')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">📊 Chart of Accounts</button>
+        <button class="import-tab"        id="itab-balances"     onclick="showImportTab('balances')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">⚖ Opening Balances</button>
+        <button class="import-tab"        id="itab-transactions" onclick="showImportTab('transactions')" style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">📋 Transactions</button>
+      </div>
+
+      <!-- Contacts import -->
+      <div id="import-contacts">
+        <div id="import-contacts-upload">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Upload a contacts CSV from Xero (Contacts export) or MYOB (Card File export).</div>
+          <label style="display:block;border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-size:24px;margin-bottom:8px;">📄</div>
+            <div style="font-size:13px;color:var(--text2);">Click to upload contacts CSV</div>
+            <input type="file" accept=".csv" style="display:none;" onchange="handleImportCSV('contacts', this)">
+          </label>
+        </div>
+        <div id="import-contacts-mapping" style="display:none;"></div>
+      </div>
+
+      <!-- Chart of Accounts import -->
+      <div id="import-accounts" style="display:none;">
+        <div id="import-accounts-upload">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Upload a chart of accounts CSV. Custom accounts will be added on top of the standard Australian chart.</div>
+          <label style="display:block;border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-size:24px;margin-bottom:8px;">📄</div>
+            <div style="font-size:13px;color:var(--text2);">Click to upload accounts CSV</div>
+            <input type="file" accept=".csv" style="display:none;" onchange="handleImportCSV('accounts', this)">
+          </label>
+        </div>
+        <div id="import-accounts-mapping" style="display:none;"></div>
+      </div>
+
+      <!-- Opening Balances import -->
+      <div id="import-balances" style="display:none;">
+        <div id="import-balances-upload">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Upload opening balances as at your start date. This creates a single opening journal entry.</div>
+          <label style="display:block;border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-size:24px;margin-bottom:8px;">📄</div>
+            <div style="font-size:13px;color:var(--text2);">Click to upload balances CSV</div>
+            <input type="file" accept=".csv" style="display:none;" onchange="handleImportCSV('balances', this)">
+          </label>
+        </div>
+        <div id="import-balances-mapping" style="display:none;"></div>
+      </div>
+
+      <!-- Transactions import -->
+      <div id="import-transactions" style="display:none;">
+        <div id="import-transactions-upload">
+          <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Upload transaction history. Each row becomes a journal entry.</div>
+          <label style="display:block;border:2px dashed var(--border);border-radius:10px;padding:24px;text-align:center;cursor:pointer;margin-bottom:12px;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+            <div style="font-size:24px;margin-bottom:8px;">📄</div>
+            <div style="font-size:13px;color:var(--text2);">Click to upload transactions CSV</div>
+            <input type="file" accept=".csv" style="display:none;" onchange="handleImportCSV('transactions', this)">
+          </label>
+        </div>
+        <div id="import-transactions-mapping" style="display:none;"></div>
+      </div>
+
+      <div id="import-status" style="display:none;margin-bottom:16px;padding:12px 14px;border-radius:8px;font-size:13px;"></div>
+
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button onclick="setupBack()" class="btn btn-ghost" style="color:var(--text);padding:13px 20px;flex-shrink:0;">← Back</button>
+        <button onclick="skipImport()" class="btn btn-ghost" style="color:var(--text);padding:13px 20px;">Skip Import</button>
+        <button onclick="finishSetup()" class="btn btn-accent" style="flex:1;padding:13px;font-size:14px;font-weight:700;">🚀 Launch Tayla Business</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -2304,6 +2378,7 @@
 <script src="assets.js"></script>
 <script src="receipts.js"></script>
 <script src="members.js"></script>
+<script src="import.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
