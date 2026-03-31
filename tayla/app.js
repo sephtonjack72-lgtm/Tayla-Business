@@ -1565,29 +1565,18 @@ function renderLedger() {
   
   // Process transactions
   transactions.forEach(t => {
-    if (t.type === 'journal' && t.debits && t.credits) {
-      t.debits.forEach(d => {
+    if (t.type === 'journal') {
+      const debits  = t.debits  || (typeof t.debits  === 'string' ? JSON.parse(t.debits)  : []);
+      const credits = t.credits || (typeof t.credits === 'string' ? JSON.parse(t.credits) : []);
+      debits.forEach(d => {
         if (balances[d.account]) {
-          balances[d.account].entries.push({
-            date: t.date,
-            ref: t.ref,
-            desc: t.desc,
-            debit: d.amount,
-            credit: 0
-          });
+          balances[d.account].entries.push({ date: t.date, ref: t.ref, desc: t.desc, debit: d.amount, credit: 0 });
           balances[d.account].balance += d.amount;
         }
       });
-      
-      t.credits.forEach(c => {
+      credits.forEach(c => {
         if (balances[c.account]) {
-          balances[c.account].entries.push({
-            date: t.date,
-            ref: t.ref,
-            desc: t.desc,
-            debit: 0,
-            credit: c.amount
-          });
+          balances[c.account].entries.push({ date: t.date, ref: t.ref, desc: t.desc, debit: 0, credit: c.amount });
           balances[c.account].balance -= c.amount;
         }
       });
@@ -1734,9 +1723,13 @@ function buildAllTimeLedgerBalances() {
   ALL_ACCOUNTS.forEach(a => bal[a.id] = 0);
 
   transactions.forEach(t => {
-    if (t.type === 'journal' && t.debits && t.credits) {
-      t.debits.forEach(d => { if (bal[d.account] !== undefined) bal[d.account] += d.amount; });
-      t.credits.forEach(c => { if (bal[c.account] !== undefined) bal[c.account] -= c.amount; });
+    if (t.type === 'journal') {
+      const debits  = t.debits  || (typeof t.debits  === 'string' ? JSON.parse(t.debits)  : []);
+      const credits = t.credits || (typeof t.credits === 'string' ? JSON.parse(t.credits) : []);
+      if (debits.length || credits.length) {
+        debits.forEach(d  => { if (bal[d.account] !== undefined) bal[d.account] += d.amount; });
+        credits.forEach(c => { if (bal[c.account] !== undefined) bal[c.account] -= c.amount; });
+      }
     } else {
       // Legacy single-entry
       const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
@@ -2013,9 +2006,13 @@ function buildLedgerBalancesForFY(fyVal) {
   // Process double-entry transactions (type === 'journal')
   transactions.forEach(t => {
     if (!inFY(t.date)) return;
-    if (t.type === 'journal' && t.debits && t.credits) {
-      t.debits.forEach(d => { if (balances[d.account] !== undefined) balances[d.account] += d.amount; });
-      t.credits.forEach(c => { if (balances[c.account] !== undefined) balances[c.account] -= c.amount; });
+    if (t.type === 'journal') {
+      const debits  = t.debits  || (typeof t.debits  === 'string' ? JSON.parse(t.debits)  : []);
+      const credits = t.credits || (typeof t.credits === 'string' ? JSON.parse(t.credits) : []);
+      if (debits.length || credits.length) {
+        debits.forEach(d  => { if (balances[d.account] !== undefined) balances[d.account] += d.amount; });
+        credits.forEach(c => { if (balances[c.account] !== undefined) balances[c.account] -= c.amount; });
+      }
     } else {
       // Legacy single-entry transactions — map to accounts
       const gstAmt = t.gst === 'yes' ? t.amount * .1 : 0;
