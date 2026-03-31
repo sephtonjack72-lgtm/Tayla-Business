@@ -55,13 +55,14 @@ async function afterLogin() {
     .maybeSingle();
 
   if (data) {
+    // Owner — has their own business
     _businessProfile = data;
     _userRole = 'owner';
     _isReadOnly = false;
     applyProfileToApp(data);
     hideAllOverlays();
   } else if (_allBusinesses.length > 0) {
-    // User has no owned business but has member access
+    // Invited member — has access to someone else's business, skip setup
     const biz = _allBusinesses[0];
     _businessProfile = biz;
     _userRole = biz._role || 'accountant';
@@ -69,8 +70,9 @@ async function afterLogin() {
     applyProfileToApp(biz);
     hideAllOverlays();
     if (typeof applyReadOnlyMode === 'function') applyReadOnlyMode();
+    toast(`👋 Welcome! You have ${_userRole} access to ${biz.biz_name || 'this business'}`);
   } else {
-    // New user — show setup wizard
+    // New user with no business and no invites — show setup wizard
     showOverlay('setup');
     initSetupWizard();
   }
