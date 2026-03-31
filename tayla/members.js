@@ -240,14 +240,14 @@ async function removeMember(memberId) {
 
 // Accept invite — called when an invited user logs in
 async function checkPendingInvites() {
-  if (!_currentUser?.email) return;
+  if (!_currentUser?.email) return false;
   const { data: pending } = await _supabase
     .from('business_members')
     .select('*')
     .eq('email', _currentUser.email)
     .eq('status', 'pending');
 
-  if (!pending?.length) return;
+  if (!pending?.length) return false;
 
   // Activate pending invites for this user
   for (const invite of pending) {
@@ -256,11 +256,7 @@ async function checkPendingInvites() {
       .eq('id', invite.id);
   }
 
-  // Reload businesses to include newly activated ones
-  await loadAllBusinesses();
-  if (pending.length > 0) {
-    toast(`✓ You now have access to ${pending.length} business${pending.length > 1 ? 'es' : ''}`);
-  }
+  return true; // signals that invites were activated
 }
 
 // ══════════════════════════════════════════════════════
