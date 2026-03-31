@@ -1777,7 +1777,18 @@ function totals() {
   getAccountsByType('revenue').forEach(a => income += -(bal[a.id] || 0));
   getAccountsByType('expense').forEach(a => expenses += (bal[a.id] || 0));
   capital  = -(bal['3010'] || 0);
-  drawings =  (bal['3020'] || 0);
+  // Drawings — 3020 is debit-normal (DR increases drawings)
+  // bal['3020'] is positive when debited (drawings taken out)
+  // Use abs to handle any sign confusion from incorrect entries
+  drawings = Math.abs(bal['3020'] || 0);
+
+  // Also catch legacy type==='drawings' transactions not in journal format
+  transactions.forEach(t => {
+    if (t.type === 'drawings' && !(t.debits?.length)) {
+      drawings += t.amount;
+    }
+  });
+
   return { income, expenses, capital, drawings, netProfit: income - expenses };
 }
 
