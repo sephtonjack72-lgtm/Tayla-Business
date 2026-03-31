@@ -1857,13 +1857,59 @@ function renderAll() {
 // ── KPIs ──
 function renderKPIs() {
   const t = totals();
+  const bal = buildAllTimeLedgerBalances();
   const swMRRTotal = portfolioMRR();
+
+  // Cash at bank from ledger (1010)
+  const cashAtBank = bal['1010'] || 0;
+
+  // Outstanding invoices
+  const outstandingInvoices = (typeof invoices !== 'undefined' ? invoices : [])
+    .filter(i => ['sent','overdue'].includes(getInvoiceStatus ? getInvoiceStatus(i) : i.status))
+    .reduce((s, i) => s + (i.total || 0), 0);
+
+  // Overdue invoices
+  const overdueInvoices = (typeof invoices !== 'undefined' ? invoices : [])
+    .filter(i => (getInvoiceStatus ? getInvoiceStatus(i) : i.status) === 'overdue')
+    .reduce((s, i) => s + (i.total || 0), 0);
+
+  // Bills owing
+  const billsOwing = (typeof bills !== 'undefined' ? bills : [])
+    .filter(b => ['received','approved','overdue'].includes(getBillStatus ? getBillStatus(b) : b.status))
+    .reduce((s, b) => s + (b.total || 0), 0);
+
+  // GST owing (2020 GST Payable - 1030 GST Receivable)
+  const gstPayable    = -(bal['2020'] || 0);
+  const gstReceivable =  (bal['1030'] || 0);
+  const gstOwing      = gstPayable - gstReceivable;
+
   document.getElementById('kpi-strip').innerHTML = `
     <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value positive">${fmt(t.income)}</div></div>
-    <div class="kpi"><div class="kpi-label">Portfolio MRR</div><div class="kpi-value positive">${fmt(swMRRTotal)}</div></div>
     <div class="kpi"><div class="kpi-label">Total Expenses</div><div class="kpi-value negative">${fmt(t.expenses)}</div></div>
     <div class="kpi"><div class="kpi-label">Net Profit / (Loss)</div><div class="kpi-value ${t.netProfit >= 0 ? 'positive' : 'negative'}">${fmt(t.netProfit)}</div></div>
-    <div class="kpi"><div class="kpi-label">Drawings</div><div class="kpi-value">${fmt(t.drawings)}</div></div>
+    <div class="kpi"><div class="kpi-label">Portfolio MRR</div><div class="kpi-value positive">${fmt(swMRRTotal)}</div></div>
+    <div class="kpi"><div class="kpi-label">Cash at Bank</div><div class="kpi-value ${cashAtBank >= 0 ? 'positive' : 'negative'}">${fmt(cashAtBank)}</div></div>
+  `;
+
+  const kpi2 = document.getElementById('kpi-strip-2');
+  if (kpi2) kpi2.innerHTML = `
+    <div class="kpi" style="cursor:pointer;" onclick="showPage('invoices-page')">
+      <div class="kpi-label">Invoices Outstanding</div>
+      <div class="kpi-value ${overdueInvoices > 0 ? 'negative' : 'positive'}">${fmt(outstandingInvoices)}</div>
+      ${overdueInvoices > 0 ? `<div style="font-size:11px;color:var(--danger);margin-top:2px;">${fmt(overdueInvoices)} overdue</div>` : ''}
+    </div>
+    <div class="kpi" style="cursor:pointer;" onclick="showPage('bills-page')">
+      <div class="kpi-label">Bills Owing</div>
+      <div class="kpi-value negative">${fmt(billsOwing)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">GST Position</div>
+      <div class="kpi-value ${gstOwing > 0 ? 'negative' : 'positive'}">${fmt(Math.abs(gstOwing))} ${gstOwing > 0 ? 'Payable' : gstOwing < 0 ? 'Refund' : ''}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Drawings</div>
+      <div class="kpi-value">${fmt(t.drawings)}</div>
+    </div>
   `;
 }
 
@@ -2365,123 +2411,142 @@ function deleteLiability(id) {
   renderAll();
 }
 
-// ── GST ──
+// ── GST / BAS ──
 function renderGST() {
+  const fyVal  = parseInt(document.getElementById('is-fy')?.value || appSettings.defaultFY || '2026');
+  const fyStart = new Date(`${fyVal - 1}-07-01`);
+  const fyEnd   = new Date(`${fyVal}-06-30`);
+
   let gstCollected = 0, gstPaid = 0;
   const outputEntries = [], inputEntries = [];
 
+  // Helper — is date in current FY?
+  const inFY = d => { const dt = new Date(d); return dt >= fyStart && dt <= fyEnd; };
+
+  // ── Scan all journal-type transactions
   transactions.forEach(t => {
+    if (!inFY(t.date)) return;
+
     if (t.type === 'income' && t.gst === 'yes') {
       const gstAmt = +(t.amount / 11).toFixed(2);
-      const netAmt = +(t.amount - gstAmt).toFixed(2);
       gstCollected += gstAmt;
-      outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: netAmt, gst: gstAmt, total: t.amount });
+      outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: +(t.amount - gstAmt).toFixed(2), gst: gstAmt, total: t.amount });
 
     } else if (t.type === 'expense' && t.gst === 'yes') {
       const gstAmt = +(t.amount / 11).toFixed(2);
-      const netAmt = +(t.amount - gstAmt).toFixed(2);
       gstPaid += gstAmt;
-      inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: netAmt, gst: gstAmt, total: t.amount });
+      inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: +(t.amount - gstAmt).toFixed(2), gst: gstAmt, total: t.amount });
 
-    } else if (t.type === 'journal' && t.gst === 'yes') {
-      // Scan debit/credit lines for GST accounts
+    } else if (t.type === 'journal') {
+      // Scan credit lines hitting 2020 GST Payable = GST collected on sales
       (t.credits || []).forEach(c => {
-        if (c.account === '2020') {
+        if (c.account === '2020' && c.amount > 0) {
           gstCollected += c.amount;
-          outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: +(c.amount * 10).toFixed(2), gst: c.amount, total: +(c.amount * 11).toFixed(2) });
+          // Find the matching revenue line for this transaction to get the net/total
+          const revLine = (t.credits || []).find(x => x.account !== '2020' && getAccount(x.account)?.type === 'revenue');
+          const net = revLine ? revLine.amount : +(c.amount * 10).toFixed(2);
+          outputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net, gst: c.amount, total: +(net + c.amount).toFixed(2) });
         }
       });
+      // Scan debit lines hitting 1030 GST Receivable = GST paid on purchases
       (t.debits || []).forEach(d => {
-        if (d.account === '1030') {
+        if (d.account === '1030' && d.amount > 0) {
           gstPaid += d.amount;
-          inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net: +(d.amount * 10).toFixed(2), gst: d.amount, total: +(d.amount * 11).toFixed(2) });
+          const expLine = (t.debits || []).find(x => x.account !== '1030' && getAccount(x.account)?.type === 'expense');
+          const net = expLine ? expLine.amount : +(d.amount * 10).toFixed(2);
+          inputEntries.push({ date: t.date, ref: t.ref || 'TX-'+t.id.slice(0,4), desc: t.desc, net, gst: d.amount, total: +(net + d.amount).toFixed(2) });
         }
       });
     }
   });
 
-  // Also check general journals for GST accounts
+  // ── Scan general journals
   journals.forEach(j => {
+    if (!inFY(j.date)) return;
     j.lines.forEach(line => {
-      const acc = getAccount(line.accountId);
-      if (acc?.id === '2020' && line.credit > 0) {
+      if (line.accountId === '2020' && line.credit > 0) {
         gstCollected += line.credit;
         outputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: +(line.credit * 10).toFixed(2), gst: line.credit, total: +(line.credit * 11).toFixed(2) });
       }
-      if (acc?.id === '1030' && line.debit > 0) {
+      if (line.accountId === '1030' && line.debit > 0) {
         gstPaid += line.debit;
         inputEntries.push({ date: j.date, ref: j.ref, desc: j.narration, net: +(line.debit * 10).toFixed(2), gst: line.debit, total: +(line.debit * 11).toFixed(2) });
       }
     });
   });
-  
+
+  // Round totals
+  gstCollected = +gstCollected.toFixed(2);
+  gstPaid      = +gstPaid.toFixed(2);
+  const net    = +(gstCollected - gstPaid).toFixed(2);
+
+  // ── Update KPIs
   document.getElementById('gst-collected-kpi').textContent = fmt(gstCollected);
-  document.getElementById('gst-paid-kpi').textContent = fmt(gstPaid);
-  const net = gstCollected - gstPaid;
-  document.getElementById('gst-net-kpi').textContent = fmt(Math.abs(net));
-  document.getElementById('gst-net-kpi').className = 'kpi-value ' + (net >= 0 ? 'negative' : 'positive');
-  
-  const controlBalance = gstCollected - gstPaid;
-  document.getElementById('gst-control-kpi').textContent = fmt(Math.abs(controlBalance)) + (controlBalance >= 0 ? ' CR' : ' DR');
-  document.getElementById('gst-control-kpi').className = 'kpi-value ' + (controlBalance >= 0 ? 'negative' : 'positive');
-  
+  document.getElementById('gst-paid-kpi').textContent      = fmt(gstPaid);
+  document.getElementById('gst-net-kpi').textContent       = fmt(Math.abs(net));
+  document.getElementById('gst-net-kpi').className         = 'kpi-value ' + (net >= 0 ? 'negative' : 'positive');
+  document.getElementById('gst-control-kpi').textContent   = fmt(Math.abs(net)) + (net >= 0 ? ' CR' : ' DR');
+  document.getElementById('gst-control-kpi').className     = 'kpi-value ' + (net >= 0 ? 'negative' : 'positive');
+
+  // ── Output entries table
   document.getElementById('gst-output-tbody').innerHTML = outputEntries.length
-    ? outputEntries.map(e => `<tr>
-        <td>${fmtDate(e.date)}</td>
-        <td><span class="mono">${e.ref}</span></td>
-        <td>${e.desc}</td>
-        <td class="mono">${fmt(e.net)}</td>
-        <td class="mono">${fmt(e.gst)}</td>
-        <td class="mono">${fmt(e.total)}</td>
+    ? outputEntries.sort((a,b) => a.date.localeCompare(b.date)).map(e => `<tr>
+        <td>${fmtDate(e.date)}</td><td><span class="mono">${e.ref}</span></td><td>${e.desc}</td>
+        <td class="mono">${fmt(e.net)}</td><td class="mono">${fmt(e.gst)}</td><td class="mono">${fmt(e.total)}</td>
       </tr>`).join('')
-    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">No GST on sales recorded</td></tr>';
-  
+    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">No GST on sales recorded for this period</td></tr>';
+
+  // ── Input entries table
   document.getElementById('gst-input-tbody').innerHTML = inputEntries.length
-    ? inputEntries.map(e => `<tr>
-        <td>${fmtDate(e.date)}</td>
-        <td><span class="mono">${e.ref}</span></td>
-        <td>${e.desc}</td>
-        <td class="mono">${fmt(e.net)}</td>
-        <td class="mono">${fmt(e.gst)}</td>
-        <td class="mono">${fmt(e.total)}</td>
+    ? inputEntries.sort((a,b) => a.date.localeCompare(b.date)).map(e => `<tr>
+        <td>${fmtDate(e.date)}</td><td><span class="mono">${e.ref}</span></td><td>${e.desc}</td>
+        <td class="mono">${fmt(e.net)}</td><td class="mono">${fmt(e.gst)}</td><td class="mono">${fmt(e.total)}</td>
       </tr>`).join('')
-    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">No GST on purchases recorded</td></tr>';
-  
+    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">No GST on purchases recorded for this period</td></tr>';
+
+  // ── GST Control reconciliation
   document.getElementById('gst-control-body').innerHTML = `
-    <div class="row"><span>GST Payable (Account 2020)</span><span class="amount negative">${fmt(gstCollected)} CR</span></div>
-    <div class="row"><span>GST Receivable (Account 1030)</span><span class="amount positive">${fmt(gstPaid)} DR</span></div>
-    <div class="row total"><span>Net GST Position</span><span class="amount ${net >= 0 ? 'negative' : 'positive'}">${fmt(Math.abs(net))} ${net >= 0 ? 'CR (Payable)' : 'DR (Refund)'}</span></div>
-    <div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;">
-      ${net > 0 
-        ? '✓ You owe the ATO ' + fmt(net) + ' — this amount should be lodged on your BAS and paid by the due date.'
-        : net < 0 
-          ? '✓ The ATO owes you ' + fmt(Math.abs(net)) + ' refund — claim this on your BAS.'
+    <div class="row"><span>1A — GST on Sales (GST Payable 2020)</span><span class="amount negative">${fmt(gstCollected)} CR</span></div>
+    <div class="row"><span>1B — GST on Purchases (GST Receivable 1030)</span><span class="amount positive">${fmt(gstPaid)} DR</span></div>
+    <div class="row total"><span>9 — Net GST Payable / (Refund)</span><span class="amount ${net >= 0 ? 'negative' : 'positive'}">${fmt(Math.abs(net))} ${net >= 0 ? 'CR (Payable)' : 'DR (Refund)'}</span></div>
+    <div style="margin-top:12px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);">
+      ${net > 0
+        ? `✓ You owe the ATO <strong>${fmt(net)}</strong> for FY${fyVal}. Lodge on your BAS and pay by the due date.`
+        : net < 0
+          ? `✓ The ATO owes you a <strong>${fmt(Math.abs(net))}</strong> refund for FY${fyVal}. Claim on your BAS.`
           : '✓ GST position is neutral — no payment or refund due.'}
     </div>
   `;
-  
-  const qs = ['Q1','Q2','Q3','Q4'];
-  const basRows = qs.map(q => {
-    const qOutput = outputEntries.filter(e => quarter(e.date) === q).reduce((s,e) => s + e.gst, 0);
-    const qInput = inputEntries.filter(e => quarter(e.date) === q).reduce((s,e) => s + e.gst, 0);
-    const qNet = qOutput - qInput;
+
+  // ── BAS Quarterly breakdown
+  const quarters = [
+    { label: 'Q1 (Jul–Sep)', start: new Date(`${fyVal-1}-07-01`), end: new Date(`${fyVal-1}-09-30`) },
+    { label: 'Q2 (Oct–Dec)', start: new Date(`${fyVal-1}-10-01`), end: new Date(`${fyVal-1}-12-31`) },
+    { label: 'Q3 (Jan–Mar)', start: new Date(`${fyVal}-01-01`),   end: new Date(`${fyVal}-03-31`)   },
+    { label: 'Q4 (Apr–Jun)', start: new Date(`${fyVal}-04-01`),   end: new Date(`${fyVal}-06-30`)   },
+  ];
+
+  const basRows = quarters.map(q => {
+    const qOut = outputEntries.filter(e => { const d = new Date(e.date); return d >= q.start && d <= q.end; }).reduce((s,e) => s+e.gst, 0);
+    const qIn  = inputEntries.filter(e => { const d = new Date(e.date); return d >= q.start && d <= q.end; }).reduce((s,e) => s+e.gst, 0);
+    const qNet = +(qOut - qIn).toFixed(2);
     return `<tr>
-      <td>${q}</td>
-      <td class="mono">${fmt(qOutput)}</td>
-      <td class="mono">${fmt(qInput)}</td>
-      <td class="mono ${qNet >= 0 ? 'negative' : 'positive'}">${fmt(qNet)}</td>
+      <td style="font-weight:500;">${q.label}</td>
+      <td class="mono">${fmt(qOut)}</td>
+      <td class="mono">${fmt(qIn)}</td>
+      <td class="mono ${qNet >= 0 ? 'negative' : 'positive'}">${fmt(Math.abs(qNet))}</td>
       <td><span class="badge ${qNet > 0 ? 'badge-operating' : qNet < 0 ? 'badge-income' : 'badge-setup'}">${qNet > 0 ? 'Payable' : qNet < 0 ? 'Refund' : 'Nil'}</span></td>
     </tr>`;
   });
-  
-  basRows.push(`<tr style="font-weight:600;background:var(--surface2);">
-    <td>Total</td>
+
+  basRows.push(`<tr style="font-weight:700;background:var(--surface2);">
+    <td>FY${fyVal} Total</td>
     <td class="mono">${fmt(gstCollected)}</td>
     <td class="mono">${fmt(gstPaid)}</td>
-    <td class="mono ${net >= 0 ? 'negative' : 'positive'}">${fmt(net)}</td>
-    <td></td>
+    <td class="mono ${net >= 0 ? 'negative' : 'positive'}">${fmt(Math.abs(net))}</td>
+    <td><span class="badge ${net > 0 ? 'badge-operating' : net < 0 ? 'badge-income' : 'badge-setup'}">${net > 0 ? 'Payable' : net < 0 ? 'Refund' : 'Nil'}</span></td>
   </tr>`);
-  
+
   document.getElementById('bas-tbody').innerHTML = basRows.join('');
 }
 
@@ -3269,6 +3334,59 @@ function saveSettings() {
   if (typeof initCurrencyUI === 'function') initCurrencyUI();
 }
 
+// ── Bank details
+function saveBankDetails() {
+  const details = {
+    bankName:      document.getElementById('setting-bank-name')?.value || '',
+    accountName:   document.getElementById('setting-account-name')?.value || '',
+    bsb:           document.getElementById('setting-bsb')?.value || '',
+    accountNumber: document.getElementById('setting-account-number')?.value || '',
+    paymentRef:    document.getElementById('setting-payment-ref')?.value || '',
+  };
+  localStorage.setItem('bankDetails', JSON.stringify(details));
+}
+
+function loadBankDetails() {
+  const details = JSON.parse(localStorage.getItem('bankDetails') || '{}');
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  set('setting-bank-name',      details.bankName);
+  set('setting-account-name',   details.accountName);
+  set('setting-bsb',            details.bsb);
+  set('setting-account-number', details.accountNumber);
+  set('setting-payment-ref',    details.paymentRef);
+  return details;
+}
+
+function getBankDetails() {
+  return JSON.parse(localStorage.getItem('bankDetails') || '{}');
+}
+
+// ── Invoice reminders
+function sendInvoiceReminder(invoiceId) {
+  const inv     = (typeof invoices !== 'undefined' ? invoices : []).find(i => i.id === invoiceId);
+  const contact = (typeof contacts !== 'undefined' ? contacts : []).find(c => c.id === inv?.contact_id);
+  const profile = _businessProfile || {};
+  if (!contact?.email) { toast('No email address on file for this client'); return; }
+  const daysPast = inv.due_date
+    ? Math.floor((new Date() - new Date(inv.due_date)) / 86400000)
+    : 0;
+  const subject = encodeURIComponent(`Payment Reminder — ${inv.number} — ${profile.biz_name || 'Tayla Business'}`);
+  const body = encodeURIComponent(
+`Hi ${contact.name},
+
+This is a friendly reminder that invoice ${inv.number} for ${fmt(inv.total)} was due on ${fmtDate(inv.due_date)}${daysPast > 0 ? ` (${daysPast} days ago)` : ''}.
+
+Please arrange payment at your earliest convenience.
+
+${getBankDetails().bankName ? `Payment details:\nBank: ${getBankDetails().bankName}\nAccount Name: ${getBankDetails().accountName}\nBSB: ${getBankDetails().bsb}\nAccount Number: ${getBankDetails().accountNumber}\nReference: ${inv.number}` : ''}
+
+Kind regards,
+${profile.biz_name || ''}`
+  );
+  window.open(`mailto:${contact.email}?subject=${subject}&body=${body}`);
+  toast(`Reminder email drafted for ${contact.name}`);
+}
+
 function loadSettings() {
   const s = appSettings;
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
@@ -3284,6 +3402,7 @@ function loadSettings() {
   renderSoftwareSettings();
   renderSettingsProfilePreview();
   if (typeof initCurrencyUI === 'function') initCurrencyUI();
+  loadBankDetails();
 }
 
 function syncEntityName() {
