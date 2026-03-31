@@ -441,6 +441,7 @@
 <!-- ══════════════════ DASHBOARD ══════════════════ -->
 <div id="dashboard" class="page active">
   <div class="kpi-grid" id="kpi-strip"></div>
+  <div class="kpi-grid" id="kpi-strip-2" style="margin-top:-8px;margin-bottom:8px;"></div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;" class="responsive-2col">
 
@@ -954,6 +955,40 @@
     <div class="card-body">
       <div id="settings-profile-preview" style="font-size:13px;color:var(--text2);line-height:1.8;">
         <span style="color:var(--text3);">Complete your business setup to see your profile here.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bank Details — for invoice payment instructions -->
+  <div class="card section-gap">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Bank Details</div>
+        <div class="text-sm">Shown on invoices for payment. Leave blank to omit from invoices.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group">
+          <label>Bank Name</label>
+          <input type="text" id="setting-bank-name" placeholder="e.g. Commonwealth Bank" oninput="saveBankDetails()">
+        </div>
+        <div class="form-group">
+          <label>Account Name</label>
+          <input type="text" id="setting-account-name" placeholder="e.g. Tayla Financial Pty Ltd" oninput="saveBankDetails()">
+        </div>
+        <div class="form-group">
+          <label>BSB</label>
+          <input type="text" id="setting-bsb" placeholder="062-000" maxlength="7" oninput="saveBankDetails()">
+        </div>
+        <div class="form-group">
+          <label>Account Number</label>
+          <input type="text" id="setting-account-number" placeholder="12345678" oninput="saveBankDetails()">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:4px;">
+        <label>Payment Reference Instructions</label>
+        <input type="text" id="setting-payment-ref" placeholder="e.g. Please use invoice number as reference" oninput="saveBankDetails()">
       </div>
     </div>
   </div>
