@@ -1769,18 +1769,29 @@ function totals() {
   let income = 0, expenses = 0, capital = 0, drawings = 0;
   getAccountsByType('revenue').forEach(a => income += -(bal[a.id] || 0));
   getAccountsByType('expense').forEach(a => expenses += (bal[a.id] || 0));
-  capital  = -(bal['3010'] || 0);
-  // Drawings — 3020 is debit-normal (DR increases drawings)
-  // bal['3020'] is positive when debited (drawings taken out)
-  // Use abs to handle any sign confusion from incorrect entries
-  drawings = Math.abs(bal['3020'] || 0);
 
-  // Also catch legacy type==='drawings' transactions not in journal format
-  transactions.forEach(t => {
-    if (t.type === 'drawings' && !(t.debits?.length)) {
-      drawings += t.amount;
-    }
-  });
+  // Capital injected (credits to 3010 = negative balance = positive capital)
+  capital  = -(bal['3010'] || 0);
+  // Drawings taken (debits to 3020 = positive balance)
+  drawings =  (bal['3020'] || 0);
+
+  // If no 3020 usage, check if capital account has net debit movements (owner drawings via 3010)
+  if (drawings === 0) {
+    // Any debit to 3010 reduces capital — treat as drawings
+    let capitalDebits = 0;
+    transactions.forEach(t => {
+      if (t.type === 'journal') {
+        const debits = t.debits || [];
+        debits.forEach(d => { if (d.account === '3010') capitalDebits += d.amount; });
+      } else if (t.type === 'drawings') {
+        capitalDebits += t.amount;
+      }
+    });
+    journals.forEach(j => {
+      j.lines.forEach(l => { if (l.accountId === '3010' && l.debit > 0) capitalDebits += l.debit; });
+    });
+    drawings = capitalDebits;
+  }
 
   return { income, expenses, capital, drawings, netProfit: income - expenses };
 }
@@ -1911,7 +1922,7 @@ function renderKPIs() {
       <div class="kpi-value ${gstOwing > 0 ? 'negative' : 'positive'}">${fmt(Math.abs(gstOwing))} ${gstOwing > 0 ? 'Payable' : gstOwing < 0 ? 'Refund' : ''}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Drawings</div>
+      <div class="kpi-label">Owner Withdrawals</div>
       <div class="kpi-value">${fmt(t.drawings)}</div>
     </div>
   `;
@@ -3467,6 +3478,33 @@ function applyTaxDefaults() {
   if (fy)     { const el = document.getElementById('tax-fy');     if (el) el.value = fy; }
   renderTax();
   toast('Tax defaults applied ✓');
+}
+
+async function resyncTransactions() {
+  const statusEl = document.getElementById('resync-status');
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Re-syncing transactions…';
+
+  if (!_businessId) { statusEl.textContent = '⚠ No business loaded.'; return; }
+
+  let count = 0, errors = 0;
+  for (const tx of transactions) {
+    const { desc, ...rest } = tx;
+    const row = {
+      ...rest,
+      description:  desc,
+      business_id:  _businessId,
+      debits:       tx.debits  ? JSON.stringify(tx.debits)  : null,
+      credits:      tx.credits ? JSON.stringify(tx.credits) : null,
+    };
+    const { error } = await _supabase.from('transactions').upsert(row, { onConflict: 'id' });
+    if (error) { console.error('Resync error:', error); errors++; }
+    else count++;
+  }
+
+  statusEl.textContent = `✓ Re-synced ${count} transactions${errors ? ` · ${errors} errors` : ''}.`;
+  renderAll();
+  toast(`✓ Re-synced ${count} transactions`);
 }
 
 function confirmClearData() {
