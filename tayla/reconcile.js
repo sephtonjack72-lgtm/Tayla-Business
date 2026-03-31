@@ -66,7 +66,10 @@ async function dbSaveStatementLines(lines) {
   if (!_businessId) return;
   const { error } = await _supabase
     .from('bank_statement_lines').upsert(lines, { onConflict: 'id' });
-  if (error) console.error('Save statement lines failed:', error);
+  if (error) {
+    console.error('Save statement lines failed:', error);
+    toast('⚠ Imported locally but failed to sync: ' + error.message);
+  }
 }
 
 async function dbUpdateStatementLine(id, updates) {
@@ -360,13 +363,20 @@ function showImportPreview(rows) {
 async function confirmImport() {
   if (!parsedCsvRows.length) return;
 
+  const btn = document.querySelector('#import-preview-wrap .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+
   // Deduplicate against already imported lines (same date + amount + description)
   const existing = statementLines.filter(l => l.bank_account_id === activeImportAccountId);
   const newRows = parsedCsvRows.filter(r => !existing.some(e =>
     e.date === r.date && Math.abs(e.amount - r.amount) < 0.01 && e.description === r.description
   ));
 
-  if (!newRows.length) { toast('All rows already imported — no duplicates added'); return; }
+  if (!newRows.length) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Import These Transactions →'; }
+    toast('All rows already imported — no duplicates added');
+    return;
+  }
 
   await dbSaveStatementLines(newRows);
 
@@ -374,8 +384,17 @@ async function confirmImport() {
   document.getElementById('import-preview-wrap').style.display = 'none';
   document.getElementById('csv-file-input').value = '';
   parsedCsvRows = [];
+  if (btn) { btn.disabled = false; btn.textContent = 'Import These Transactions →'; }
 
-  toast(`✓ Imported ${newRows.length} transactions`);
+  toast(`✓ Imported ${newRows.length} bank transactions`);
+
+  // Switch to match tab and pre-select the right account
+  const matchSel = document.getElementById('match-account-select');
+  if (matchSel && activeImportAccountId) {
+    // Ensure options are populated first
+    renderMatchAccountSelect();
+    matchSel.value = activeImportAccountId;
+  }
   showReconTab('match');
 }
 
