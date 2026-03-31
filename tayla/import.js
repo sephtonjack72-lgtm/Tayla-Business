@@ -96,7 +96,7 @@ function showImportTab(tab) {
 //  CSV PARSING
 // ══════════════════════════════════════════════════════
 
-function parseCSV(text) {
+function parseImportCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (!lines.length) return { headers: [], rows: [] };
 
@@ -150,7 +150,7 @@ function handleImportCSV(type, input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
-    const { headers, rows } = parseCSV(e.target.result);
+    const { headers, rows } = parseImportCSV(e.target.result);
     if (!headers.length || !rows.length) {
       showImportStatus('Could not read CSV file — check the format and try again.', 'error');
       return;
