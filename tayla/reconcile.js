@@ -158,17 +158,40 @@ async function deleteBankAccountConfirm(id) {
 // ══════════════════════════════════════════════════════
 
 const CSV_FORMATS = {
-  commbank: { dateCol: 0, descCol: 2, amountCol: 1, balanceCol: 3, skipRows: 1,
-    dateFormat: 'dd/mm/yyyy', note: 'Date,Amount,Description,Balance' },
-  anz:      { dateCol: 0, descCol: 1, amountCol: 2, balanceCol: 3, skipRows: 1,
-    dateFormat: 'dd/mm/yyyy', note: 'Date,Description,Amount,Balance' },
-  nab:      { dateCol: 0, descCol: 2, amountCol: 1, balanceCol: 3, skipRows: 1,
-    dateFormat: 'dd-mmm-yy', note: 'Date,Amount,Description,Balance' },
-  westpac:  { dateCol: 0, descCol: 1, amountCol: 2, balanceCol: 3, skipRows: 1,
-    dateFormat: 'dd/mm/yyyy', note: 'Date,Description,Amount,Balance' },
-  generic:  { dateCol: 0, descCol: 1, amountCol: 2, balanceCol: -1, skipRows: 1,
-    dateFormat: 'auto', note: 'Date,Description,Amount' },
+  commbank: { dateFormat: 'dd/mm/yyyy', note: 'Date,Amount,Description,Balance' },
+  anz:      { dateFormat: 'dd/mm/yyyy', note: 'Date,Description,Amount,Balance' },
+  nab:      { dateFormat: 'dd-mmm-yy',  note: 'Date,Amount,Description,Balance' },
+  westpac:  { dateFormat: 'dd/mm/yyyy', note: 'Bank Account,Date,Narrative,Debit Amount,Credit Amount,Balance' },
+  generic:  { dateFormat: 'auto',       note: 'Date,Description,Amount' },
 };
+
+const HEADER_ALIASES = {
+  date:    ['date', 'transaction date', 'posted date', 'entry date', 'value date', 'settlement date'],
+  desc:    ['description', 'narrative', 'details', 'memo', 'particulars', 'transaction details', 'narration', 'reference'],
+  amount:  ['amount', 'transaction amount', 'net amount', 'value', 'net'],
+  debit:   ['debit', 'debit amount', 'withdrawals', 'withdrawal amount', 'dr amount', 'dr'],
+  credit:  ['credit', 'credit amount', 'deposits', 'deposit amount', 'cr amount', 'cr'],
+  balance: ['balance', 'running balance', 'closing balance', 'available balance'],
+};
+
+function findColByAliases(header, aliases) {
+  for (const alias of aliases) {
+    const idx = header.findIndex(h => h === alias || h.startsWith(alias));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function detectColsFromHeader(header) {
+  return {
+    dateCol:    findColByAliases(header, HEADER_ALIASES.date),
+    descCol:    findColByAliases(header, HEADER_ALIASES.desc),
+    amountCol:  findColByAliases(header, HEADER_ALIASES.amount),
+    debitCol:   findColByAliases(header, HEADER_ALIASES.debit),
+    creditCol:  findColByAliases(header, HEADER_ALIASES.credit),
+    balanceCol: findColByAliases(header, HEADER_ALIASES.balance),
+  };
+}
 
 function parseDate(str, format) {
   if (!str) return null;
@@ -214,11 +237,12 @@ function parseCSV(text) {
 }
 
 function detectFormat(rows) {
-  // Look at the header row and first data row to guess format
   if (!rows.length) return 'generic';
-  const header = rows[0].map(h => h.toLowerCase().replace(/"/g, ''));
+  const header = rows[0].map(h => h.toLowerCase().replace(/"/g, '').trim());
+  if (header.some(h => h.includes('narrative')) || header.some(h => h === 'debit amount')) return 'westpac';
   if (header.some(h => h.includes('bsb'))) return 'commbank';
-  if (header[1] && header[1].includes('amount') && header[2]) return 'anz';
+  if (header.some(h => h.includes('transaction date'))) return 'nab';
+  if (header.some(h => h === 'date') && header.some(h => h === 'amount')) return 'anz';
   return 'generic';
 }
 
@@ -252,19 +276,37 @@ function processCSVFile(file) {
       if (formatKey === 'auto') formatKey = detectFormat(rows);
       const fmt2 = CSV_FORMATS[formatKey] || CSV_FORMATS.generic;
 
-      const dataRows = rows.slice(fmt2.skipRows);
+      // Smart column detection from header row
+      const header = rows[0].map(h => h.toLowerCase().replace(/"/g, '').trim());
+      const cols_idx = detectColsFromHeader(header);
+
+      const dataRows = rows.slice(1); // always skip header row
       parsedCsvRows = [];
 
       dataRows.forEach((cols, i) => {
         if (cols.length < 2) return;
-        const dateStr   = cols[fmt2.dateCol]?.replace(/"/g, '').trim();
-        const descStr   = cols[fmt2.descCol]?.replace(/"/g, '').trim();
-        const amountStr = cols[fmt2.amountCol]?.replace(/"/g, '').replace(/[^0-9.\-]/g, '').trim();
-        const balStr    = fmt2.balanceCol >= 0 ? cols[fmt2.balanceCol]?.replace(/"/g, '').replace(/[^0-9.\-]/g, '') : null;
+        const clean = s => (s || '').replace(/"/g, '').trim();
 
-        const date   = parseDate(dateStr, fmt2.dateFormat);
-        const amount = parseFloat(amountStr);
-        if (!date || isNaN(amount)) return;
+        const dateStr = clean(cols[cols_idx.dateCol]);
+        const descStr = clean(cols[cols_idx.descCol]);
+        const balStr  = cols_idx.balanceCol >= 0 ? clean(cols[cols_idx.balanceCol]).replace(/[^0-9.\-]/g, '') : null;
+
+        // Handle both single amount column and split debit/credit columns
+        let amount;
+        if (cols_idx.debitCol >= 0 || cols_idx.creditCol >= 0) {
+          const debitStr  = cols_idx.debitCol  >= 0 ? clean(cols[cols_idx.debitCol]).replace(/[^0-9.]/g, '')  : '';
+          const creditStr = cols_idx.creditCol >= 0 ? clean(cols[cols_idx.creditCol]).replace(/[^0-9.]/g, '') : '';
+          const debit     = parseFloat(debitStr)  || 0;
+          const credit    = parseFloat(creditStr) || 0;
+          // Debits = money out (negative), Credits = money in (positive)
+          amount = credit > 0 ? credit : -debit;
+        } else {
+          const amountStr = clean(cols[cols_idx.amountCol]).replace(/[^0-9.\-]/g, '');
+          amount = parseFloat(amountStr);
+        }
+
+        const date = parseDate(dateStr, fmt2.dateFormat);
+        if (!date || isNaN(amount) || amount === 0) return;
 
         parsedCsvRows.push({
           id:              uid(),
