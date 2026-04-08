@@ -119,6 +119,9 @@ function applyProfileToApp(profile) {
       if (typeof dbLoadReceipts    === 'function') dbLoadReceipts();
       if (typeof loadMembers       === 'function') loadMembers();
       if (typeof initCurrencyUI    === 'function') initCurrencyUI();
+      if (typeof dbLoadSuppliers   === 'function') dbLoadSuppliers();
+      if (typeof dbLoadStockItems  === 'function') dbLoadStockItems();
+      if (typeof dbLoadStocktakeSessions === 'function') dbLoadStocktakeSessions();
       renderAll();
       // Re-render software settings after data is available
       setTimeout(() => renderSoftwareSettings(), 500);
@@ -619,6 +622,7 @@ const CHART_OF_ACCOUNTS = {
       { id: '5090', name: 'Domain & Registration', type: 'expense', gst: true },
       { id: '5100', name: 'Motor Vehicle Expenses', type: 'expense', gst: true },
       { id: '5110', name: 'Professional Fees', type: 'expense', gst: true },
+      { id: '5120', name: 'Cost of Goods Sold', type: 'expense', gst: true },
     ]
   }
 };
@@ -749,6 +753,7 @@ function showPage(id) {
   if (id === 'bills-page'     && typeof showBillTab    === 'function') showBillTab('list');
   if (id === 'assets-page'    && typeof showAssetTab   === 'function') showAssetTab('register');
   if (id === 'receipts-page'  && typeof showReceiptTab === 'function') showReceiptTab('upload');
+  if (id === 'stocktake-page' && typeof showStocktakeTab === 'function') showStocktakeTab('catalogue');
   if (id === 'settings-page') renderSoftwareSettings();
   renderAll();
 }
@@ -3735,4 +3740,3 @@ function setActiveSoftware(id) {
   activeSoftware = id;
   renderAll();
 }
-
