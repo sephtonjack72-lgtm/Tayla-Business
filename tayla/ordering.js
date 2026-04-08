@@ -785,13 +785,24 @@ function viewPO(id) {
   }
   document.getElementById('ord-detail-history').innerHTML = histHtml;
 
-  // Show/hide action buttons
+  // Show/hide action buttons based on status
+  const canEdit    = ['draft'].includes(po.status);
+  const canSend    = ['draft'].includes(po.status);
+  const canEmail   = ['draft','sent'].includes(po.status);
   const canReceive = ['sent','partial'].includes(po.status);
   const canReturn  = ['partial','received'].includes(po.status);
   const canVoid    = ['draft','sent'].includes(po.status);
-  document.getElementById('ord-detail-receive-btn').style.display = canReceive ? 'inline-flex' : 'none';
-  document.getElementById('ord-detail-return-btn').style.display  = canReturn  ? 'inline-flex' : 'none';
-  document.getElementById('ord-detail-void-btn').style.display    = canVoid    ? 'inline-flex' : 'none';
+
+  const show = (id, visible) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = visible ? 'inline-flex' : 'none';
+  };
+  show('ord-detail-edit-btn',    canEdit);
+  show('ord-detail-send-btn',    canSend);
+  show('ord-detail-email-btn',   canEmail);
+  show('ord-detail-receive-btn', canReceive);
+  show('ord-detail-return-btn',  canReturn);
+  show('ord-detail-void-btn',    canVoid);
 
   document.getElementById('ord-po-detail-modal').classList.add('show');
 }
@@ -806,6 +817,21 @@ async function voidPO(id) {
   renderPOList();
   renderOrdKpis();
   toast(`PO ${po.po_number} voided`);
+}
+
+// Mark a draft PO as sent directly from the detail modal
+async function savePOFromDetail() {
+  const po = _viewingPO;
+  if (!po) return;
+  if (po.status !== 'draft') { toast('PO is already sent'); return; }
+  po.status  = 'sent';
+  po.sent_at = new Date().toISOString();
+  await dbSavePurchaseOrder(po);
+  // Refresh button states
+  viewPO(po.id);
+  renderPOList();
+  renderOrdKpis();
+  toast(`PO ${po.po_number} marked as sent ✓`);
 }
 
 // ══════════════════════════════════════════════════════
