@@ -170,96 +170,102 @@ function refreshSuggestedOrders() {
 }
 
 function renderSuggestedOrders() {
-  const session = typeof getLatestSubmittedSession === 'function'
-    ? getLatestSubmittedSession()
-    : null;
-
   const sourceEl = document.getElementById('ord-suggested-source');
   const listEl   = document.getElementById('ord-suggested-list');
   if (!listEl) return;
 
-  if (!session) {
-    if (sourceEl) sourceEl.textContent = 'No submitted stocktake found';
-    listEl.innerHTML = `<div class="card"><div class="card-body" style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">
-      Run and submit a stocktake first, then come back here to generate suggested orders.
-    </div></div>`;
-    return;
-  }
+  const allItems = typeof stockItems !== 'undefined' ? stockItems : [];
+  const allSuppliers = typeof suppliers !== 'undefined' ? suppliers : [];
 
-  if (sourceEl) {
-    sourceEl.textContent = 'Based on stocktake: ' +
-      new Date(session.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) +
-      ' (' + session.staff_name + ')';
-  }
-
-  // Items below par with a supplier set
-  const belowPar = (session.items || []).filter(i =>
-    i.count !== null && i.par_level !== null && i.count < i.par_level
+  // Trigger: on_hand is at or below par level (and item is active)
+  const needsOrdering = allItems.filter(i =>
+    !i.archived &&
+    i.par_level !== null &&
+    i.on_hand   !== null &&
+    i.on_hand   <= i.par_level
   );
 
-  if (!belowPar.length) {
+  const itemsMissingData = allItems.filter(i =>
+    !i.archived &&
+    i.par_level !== null &&
+    i.on_hand   === null
+  );
+
+  if (sourceEl) {
+    const total = allItems.filter(i => !i.archived && i.par_level !== null).length;
+    sourceEl.textContent = `${needsOrdering.length} of ${total} items at or below par level`;
+  }
+
+  if (!needsOrdering.length && !itemsMissingData.length) {
     listEl.innerHTML = `<div class="card"><div class="card-body" style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">
-      All items are at or above par — no orders needed from this stocktake.
+      All items are above par level — no orders needed right now.
     </div></div>`;
     return;
   }
 
-  // Enrich with catalogue data and group by supplier
+  // Group by supplier
   const bySupplier = {};
   const noSupplier = [];
 
-  belowPar.forEach(sessionItem => {
-    const catalogueItem = (typeof stockItems !== 'undefined' ? stockItems : []).find(i => i.id === sessionItem.item_id);
-    const supplierId    = catalogueItem?.supplier_id || null;
-    const enriched      = {
-      ...sessionItem,
-      unit_cost:   catalogueItem?.unit_cost ?? null,
-      supplier_id: supplierId,
-      suggested_qty: +(sessionItem.par_level - sessionItem.count).toFixed(3),
-      order_qty:     +(sessionItem.par_level - sessionItem.count).toFixed(3),
+  needsOrdering.forEach(item => {
+    const orderQty = +(item.par_level - item.on_hand).toFixed(3);
+    const enriched = {
+      item_id:     item.id,
+      name:        item.name,
+      category:    item.category,
+      unit:        item.unit,
+      par_level:   item.par_level,
+      on_hand:     item.on_hand,
+      unit_cost:   item.unit_cost ?? null,
+      upt:         item.upt ?? null,
+      supplier_id: item.supplier_id || null,
+      suggested_qty: orderQty,
+      order_qty:     orderQty,
     };
-    if (supplierId) {
-      if (!bySupplier[supplierId]) bySupplier[supplierId] = [];
-      bySupplier[supplierId].push(enriched);
+    if (item.supplier_id) {
+      if (!bySupplier[item.supplier_id]) bySupplier[item.supplier_id] = [];
+      bySupplier[item.supplier_id].push(enriched);
     } else {
       noSupplier.push(enriched);
     }
   });
 
-  // Store suggestions in a module-level map for use by confirmAllSuggestedOrders
-  window._suggestedGroups = bySupplier;
-  window._suggestedNoSupplier = noSupplier;
+  window._suggestedGroups      = bySupplier;
+  window._suggestedNoSupplier  = noSupplier;
 
   let html = '';
 
-  // Groups with suppliers
   Object.entries(bySupplier).forEach(([supplierId, items]) => {
-    const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
-    const groupId  = 'sugg-' + supplierId;
+    const supplier = allSuppliers.find(s => s.id === supplierId);
     html += `
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header flex-between">
           <div>
             <div class="card-title" style="font-size:16px;">${supplier?.name || 'Unknown Supplier'}</div>
-            ${supplier?.lead_time_days ? `<div class="text-sm">Lead time: ${supplier.lead_time_days} day${supplier.lead_time_days !== 1 ? 's' : ''}</div>` : ''}
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;">
+              ${supplier?.lead_time_days ? `<span class="text-sm">Lead time: ${supplier.lead_time_days} day${supplier.lead_time_days !== 1 ? 's' : ''}</span>` : ''}
+              ${supplier?.payment_terms  ? `<span class="text-sm">Terms: ${supplier.payment_terms}</span>` : ''}
+            </div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="generatePOFromSuggestion('${supplierId}')">Generate PO</button>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px;gap:8px;padding:8px 20px;background:var(--surface2);border-bottom:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:1fr 80px 80px 80px 100px 100px;gap:8px;padding:8px 20px;background:var(--surface2);border-bottom:1px solid var(--border);">
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
-          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Par</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">On Hand</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Par</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">UPT</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Order Qty</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Est. Cost</span>
         </div>
         ${items.map((item, idx) => `
-          <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px;gap:8px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--border);">
+          <div style="display:grid;grid-template-columns:1fr 80px 80px 80px 100px 100px;gap:8px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--border);">
             <div>
               <div style="font-size:13px;font-weight:500;">${item.name}</div>
               <div style="font-size:11px;color:var(--text3);">${item.category} · ${item.unit || 'units'}</div>
             </div>
+            <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--danger);">${item.on_hand}</span>
             <span style="font-size:13px;font-family:'DM Mono',monospace;">${item.par_level}</span>
-            <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--danger);">${item.count}</span>
+            <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--text3);">${item.upt != null ? item.upt : '—'}</span>
             <input type="number" min="0.01" step="0.01"
               value="${item.order_qty}"
               data-supplier="${supplierId}"
@@ -288,7 +294,7 @@ function renderSuggestedOrders() {
         <div class="card-header">
           <div>
             <div class="card-title" style="font-size:16px;">No Supplier Assigned</div>
-            <div class="text-sm">Assign a supplier to these items in the Stocktake catalogue to generate POs</div>
+            <div class="text-sm">Assign a supplier to these items in the Stocktake catalogue to include them in POs</div>
           </div>
         </div>
         ${noSupplier.map(item => `
@@ -297,8 +303,11 @@ function renderSuggestedOrders() {
               <div style="font-size:13px;font-weight:500;">${item.name}</div>
               <div style="font-size:11px;color:var(--text3);">${item.category}</div>
             </div>
-            <div style="font-size:13px;color:var(--danger);font-family:'DM Mono',monospace;">
-              Need ${+(item.par_level - item.count).toFixed(3)} ${item.unit || 'units'}
+            <div style="text-align:right;">
+              <div style="font-size:13px;color:var(--danger);font-family:'DM Mono',monospace;">
+                On hand: ${item.on_hand} / Par: ${item.par_level}
+              </div>
+              <div style="font-size:11px;color:var(--text3);">Need ${item.suggested_qty} ${item.unit || 'units'}</div>
             </div>
           </div>
         `).join('')}
@@ -306,7 +315,27 @@ function renderSuggestedOrders() {
     `;
   }
 
-  listEl.innerHTML = html || `<div class="card"><div class="card-body" style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">Nothing to order.</div></div>`;
+  // Items with par set but no on_hand recorded yet
+  if (itemsMissingData.length) {
+    html += `
+      <div class="card" style="margin-bottom:16px;border-left:3px solid var(--border);">
+        <div class="card-header">
+          <div>
+            <div class="card-title" style="font-size:16px;color:var(--text3);">On-Hand Not Set</div>
+            <div class="text-sm">These items have a par level but no on-hand count — update via stocktake or item catalogue</div>
+          </div>
+        </div>
+        ${itemsMissingData.map(item => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);opacity:.6;">
+            <div style="font-size:13px;">${item.name}</div>
+            <div style="font-size:12px;color:var(--text3);">Par: ${item.par_level} · On hand: not set</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  listEl.innerHTML = html;
 }
 
 function calcSuggestionTotal(items) {
@@ -905,10 +934,24 @@ async function confirmGoodsReceived() {
   }
 
   await dbSavePurchaseOrder(po);
+
+  // Increment on_hand for each received line that matches a stock item
+  for (const rl of receiptLines) {
+    // Match by stock_item_id if present, otherwise by description
+    const catalogueItem = (typeof stockItems !== 'undefined' ? stockItems : []).find(i =>
+      (rl.stock_item_id && i.id === rl.stock_item_id) ||
+      (!rl.stock_item_id && i.name?.toLowerCase() === rl.description?.toLowerCase())
+    );
+    if (catalogueItem) {
+      catalogueItem.on_hand = +((catalogueItem.on_hand || 0) + rl.qty_received).toFixed(3);
+      if (typeof dbSaveStockItem === 'function') await dbSaveStockItem(catalogueItem);
+    }
+  }
+
   closeModal('ord-receive-modal');
   renderPOList();
   renderOrdKpis();
-  toast(`Goods received ✓${createBill ? ' · Draft bill created' : ''}`);
+  toast(`Goods received ✓${createBill ? ' · Draft bill created' : ''} · On-hand updated`);
 }
 
 async function createBillFromDelivery(po, receipt) {
