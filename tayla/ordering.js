@@ -1444,29 +1444,21 @@ function renderPriceTrends() {
 }
 
 // ══════════════════════════════════════════════════════
-//  PO PDF GENERATION
-//  Opens a new window with a printable PO document,
-//  matching the style already used for invoice PDFs.
+//  PO HTML TEMPLATE
+//  Shared by generatePOPdf (print window) and
+//  emailPOToSupplier (Edge Function email/attachment).
 // ══════════════════════════════════════════════════════
 
-function generatePOPdf(poId) {
-  const id = poId || document.getElementById('ord-po-edit-id')?.value || _viewingPO?.id;
-  const po = purchaseOrders.find(p => p.id === id);
-  // If called from the edit modal with unsaved changes, build a preview from the form
-  const isPreview = !po;
-  const supplierId = po?.supplier_id || document.getElementById('ord-po-supplier')?.value;
-  const supplier   = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
-  const biz        = typeof _businessProfile !== 'undefined' ? _businessProfile : {};
-  const lines      = po?.lines || getPOLines();
-  const poNum      = po?.po_number || document.getElementById('ord-po-number')?.value || 'PREVIEW';
-  const date       = po?.date || document.getElementById('ord-po-date')?.value || '';
-  const expected   = po?.expected_date || document.getElementById('ord-po-expected')?.value || '';
-  const notes      = po?.notes || document.getElementById('ord-po-notes')?.value || '';
-  const subtotal   = lines.reduce((s, l) => s + (l.subtotal || 0), 0);
-  const gstTotal   = lines.reduce((s, l) => s + (l.gst_amount || 0), 0);
-  const total      = subtotal + gstTotal;
+function buildPOHtml(po, supplier, biz, lines) {
+  const poNum    = po?.po_number || 'PREVIEW';
+  const date     = po?.date     || '';
+  const expected = po?.expected_date || '';
+  const notes    = po?.notes    || '';
+  const subtotal = lines.reduce((s, l) => s + (l.subtotal    || 0), 0);
+  const gstTotal = lines.reduce((s, l) => s + (l.gst_amount  || 0), 0);
+  const total    = subtotal + gstTotal;
 
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1510,15 +1502,15 @@ function generatePOPdf(poId) {
     <div>
       <div class="logo">Tayla <span>Business</span></div>
       <div style="font-size:12px;color:#5c5c7a;margin-top:4px;">${biz.biz_name || ''}</div>
-      ${biz.abn ? `<div style="font-size:12px;color:#5c5c7a;">ABN ${biz.abn}</div>` : ''}
+      ${biz.abn     ? `<div style="font-size:12px;color:#5c5c7a;">ABN ${biz.abn}</div>` : ''}
       ${biz.address ? `<div style="font-size:12px;color:#5c5c7a;">${biz.address}${biz.state ? ', ' + biz.state : ''}${biz.postcode ? ' ' + biz.postcode : ''}</div>` : ''}
     </div>
     <div style="text-align:right;">
       <div class="po-title">Purchase Order</div>
       <div class="po-meta">
         <div style="font-size:16px;font-family:'DM Mono',monospace;font-weight:500;color:#1a1a2e;">${poNum}</div>
-        <div>Date: ${date ? new Date(date).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'}) : '—'}</div>
-        ${expected ? `<div>Expected: ${new Date(expected).toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</div>` : ''}
+        <div>Date: ${date ? new Date(date).toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric'}) : '—'}</div>
+        ${expected ? `<div>Expected: ${new Date(expected).toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric'})}</div>` : ''}
         ${po?.status ? `<span class="badge badge-${po.status}">${poStatusLabel(po.status)}</span>` : ''}
       </div>
     </div>
@@ -1528,16 +1520,16 @@ function generatePOPdf(poId) {
     <div>
       <div class="party-label">From</div>
       <div class="party-name">${biz.biz_name || 'Our Business'}</div>
-      ${biz.address ? `<div class="party-detail">${biz.address}${biz.state ? ', ' + biz.state : ''}${biz.postcode ? ' ' + biz.postcode : ''}</div>` : ''}
-      ${biz.phone   ? `<div class="party-detail">${biz.phone}</div>` : ''}
+      ${biz.address   ? `<div class="party-detail">${biz.address}${biz.state ? ', ' + biz.state : ''}${biz.postcode ? ' ' + biz.postcode : ''}</div>` : ''}
+      ${biz.phone     ? `<div class="party-detail">${biz.phone}</div>` : ''}
       ${biz.biz_email ? `<div class="party-detail">${biz.biz_email}</div>` : ''}
     </div>
     <div>
       <div class="party-label">To (Supplier)</div>
       <div class="party-name">${supplier?.name || '—'}</div>
-      ${supplier?.contact_name ? `<div class="party-detail">Attn: ${supplier.contact_name}</div>` : ''}
-      ${supplier?.phone   ? `<div class="party-detail">${supplier.phone}</div>` : ''}
-      ${supplier?.email   ? `<div class="party-detail">${supplier.email}</div>` : ''}
+      ${supplier?.contact_name  ? `<div class="party-detail">Attn: ${supplier.contact_name}</div>` : ''}
+      ${supplier?.phone         ? `<div class="party-detail">${supplier.phone}</div>` : ''}
+      ${supplier?.email         ? `<div class="party-detail">${supplier.email}</div>` : ''}
       ${supplier?.payment_terms ? `<div class="party-detail">Terms: ${supplier.payment_terms}</div>` : ''}
     </div>
   </div>
@@ -1558,10 +1550,10 @@ function generatePOPdf(poId) {
         <tr>
           <td>${l.description}</td>
           <td class="mono text-right">${l.qty}</td>
-          <td class="mono text-right">$${(l.unit_cost||0).toFixed(2)}</td>
-          <td class="mono text-right">$${(l.subtotal||0).toFixed(2)}</td>
-          <td class="mono text-right">${l.gst === 'yes' ? '$' + (l.gst_amount||0).toFixed(2) : 'N/A'}</td>
-          <td class="mono text-right" style="font-weight:600;">$${((l.subtotal||0)+(l.gst_amount||0)).toFixed(2)}</td>
+          <td class="mono text-right">$${(l.unit_cost || 0).toFixed(2)}</td>
+          <td class="mono text-right">$${(l.subtotal  || 0).toFixed(2)}</td>
+          <td class="mono text-right">${l.gst === 'yes' ? '$' + (l.gst_amount || 0).toFixed(2) : 'N/A'}</td>
+          <td class="mono text-right" style="font-weight:600;">$${((l.subtotal || 0) + (l.gst_amount || 0)).toFixed(2)}</td>
         </tr>
       `).join('')}
     </tbody>
@@ -1576,42 +1568,101 @@ function generatePOPdf(poId) {
   ${notes ? `<div class="notes-section"><strong>Notes:</strong> ${notes}</div>` : ''}
 
   <div class="footer">
-    <span>Generated by Tayla Business</span>
-    <span>${new Date().toLocaleDateString('en-AU',{day:'numeric',month:'long',year:'numeric'})}</span>
+    <span>Generated by Tayla Business · usetayla.com.au</span>
+    <span>${new Date().toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric'})}</span>
   </div>
 </div>
 </body>
 </html>`;
+}
 
-  const w = window.open('', '_blank');
+// ══════════════════════════════════════════════════════
+//  PO PDF GENERATION (print window)
+// ══════════════════════════════════════════════════════
+
+function generatePOPdf(poId) {
+  const id         = poId || document.getElementById('ord-po-edit-id')?.value || _viewingPO?.id;
+  const po         = purchaseOrders.find(p => p.id === id);
+  const supplierId = po?.supplier_id || document.getElementById('ord-po-supplier')?.value;
+  const supplier   = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
+  const biz        = typeof _businessProfile !== 'undefined' ? _businessProfile : {};
+  const lines      = po?.lines || getPOLines();
+  const html       = buildPOHtml(po, supplier, biz, lines);
+  const w          = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
 }
 
-function emailPOToSupplier(poId) {
-  const id = poId || _viewingPO?.id || document.getElementById('ord-po-edit-id')?.value;
-  const po = purchaseOrders.find(p => p.id === id);
+async function emailPOToSupplier(poId) {
+  const id       = poId || _viewingPO?.id || document.getElementById('ord-po-edit-id')?.value;
+  const po       = purchaseOrders.find(p => p.id === id);
   const supplierId = po?.supplier_id || document.getElementById('ord-po-supplier')?.value;
-  const supplier   = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
-  const email      = supplier?.email;
+  const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
 
-  if (!email) {
+  if (!supplier?.email) {
     toast('No email address on file for this supplier — add one in the supplier profile');
     return;
   }
 
-  const biz     = typeof _businessProfile !== 'undefined' ? _businessProfile : {};
-  const poNum   = po?.po_number || document.getElementById('ord-po-number')?.value || 'PO';
-  const subject = encodeURIComponent(`Purchase Order ${poNum} — ${biz.biz_name || 'Tayla Business'}`);
-  const body    = encodeURIComponent(
-    `Hi ${supplier.contact_name || supplier.name},\n\nPlease find attached Purchase Order ${poNum}.\n\n` +
-    `Please confirm receipt and advise expected delivery date.\n\nThank you,\n${biz.biz_name || ''}`
-  );
+  // Resolve email settings (custom from or Tayla default)
+  const emailCfg = typeof getEmailSettings === 'function'
+    ? getEmailSettings()
+    : { from: 'noreply@usetayla.com.au', replyTo: '', isCustom: false };
 
-  window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-  if (po && po.status === 'draft') {
-    po.status  = 'sent';
-    po.sent_at = new Date().toISOString();
-    dbSavePurchaseOrder(po).then(() => { renderPOList(); renderOrdKpis(); });
-    toast(`PO marked as sent · Email opened for ${email}`);
+  const biz   = typeof _businessProfile !== 'undefined' ? _businessProfile : {};
+  const lines = po?.lines || getPOLines();
+
+  // Build PO HTML for email body + PDF attachment
+  const poHtml = buildPOHtml(po, supplier, biz, lines);
+
+  // Show sending state
+  toast('Sending PO to ' + supplier.email + '…');
+
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    const token = session?.access_token;
+
+    const res = await fetch(
+      `https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/send-po-email`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          to:          supplier.email,
+          supplierName: supplier.name,
+          contactName:  supplier.contact_name || null,
+          from:         emailCfg.from,
+          replyTo:      emailCfg.replyTo || biz.biz_email || null,
+          bizName:      biz.biz_name || 'Tayla Business',
+          poNumber:     po?.po_number || 'PO',
+          poHtml,
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast('Failed to send: ' + (err.error || res.statusText));
+      return;
+    }
+
+    // Mark PO as sent
+    if (po && po.status === 'draft') {
+      po.status  = 'sent';
+      po.sent_at = new Date().toISOString();
+      await dbSavePurchaseOrder(po);
+      renderPOList();
+      renderOrdKpis();
+    }
+
+    closeModal('ord-po-detail-modal');
+    closeModal('ord-po-modal');
+    toast('PO sent to ' + supplier.email + ' ✓');
+
+  } catch (err) {
+    console.error('Send PO email failed:', err);
+    toast('Failed to send email — check your connection');
   }
 }
