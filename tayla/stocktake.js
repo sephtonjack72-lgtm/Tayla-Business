@@ -246,6 +246,7 @@ function renderCatalogue() {
           </div>
           <div style="width:90px;font-size:12px;color:var(--text2);">${item.unit || 'units'}</div>
           <div style="width:80px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</div>
+          <div style="width:100px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.unit_cost != null ? '$' + item.unit_cost.toFixed(2) : '—'}</div>
           <div style="width:100px;font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${supplier?.name || '—'}</div>
           <div style="display:flex;gap:6px;flex-shrink:0;">
             ${item.archived
@@ -272,6 +273,7 @@ function openItemModal(id) {
   document.getElementById('stk-item-category').value = item?.category || '';
   document.getElementById('stk-item-unit').value     = item?.unit || 'bottles';
   document.getElementById('stk-item-par').value      = item?.par_level ?? '';
+  document.getElementById('stk-item-cost').value     = item?.unit_cost ?? '';
   document.getElementById('stk-item-barcode').value  = item?.barcode || '';
 
   // Populate category datalist
@@ -295,6 +297,7 @@ async function saveStockItem() {
   const category = document.getElementById('stk-item-category').value.trim();
   const unit     = document.getElementById('stk-item-unit').value;
   const parRaw   = document.getElementById('stk-item-par').value;
+  const costRaw  = document.getElementById('stk-item-cost').value;
   const barcode  = document.getElementById('stk-item-barcode').value.trim();
   const supplier = document.getElementById('stk-item-supplier').value;
   const editId   = document.getElementById('stk-item-edit-id').value;
@@ -307,7 +310,8 @@ async function saveStockItem() {
     name,
     category,
     unit,
-    par_level:   parRaw !== '' ? parseFloat(parRaw) : null,
+    par_level:   parRaw  !== '' ? parseFloat(parRaw)  : null,
+    unit_cost:   costRaw !== '' ? parseFloat(costRaw) : null,
     barcode:     barcode || null,
     supplier_id: supplier || null,
     archived:    false,
@@ -483,7 +487,8 @@ function startStocktake() {
     category:  item.category,
     unit:      item.unit,
     par_level: item.par_level,
-    count:     null,   // null = not yet counted
+    unit_cost: item.unit_cost ?? null,
+    count:     null,
     variance:  null,
     variance_reason: null,
   }));
@@ -801,22 +806,41 @@ async function postStocktakeJournals(session) {
 
   for (const [reason, items] of Object.entries(byReason)) {
     const narration = `Stocktake ${date} (${session.staff_name}) — ${reasonLabels[reason] || reason}:\n` +
-      items.map(i => `  ${i.name}: counted ${i.count} ${i.unit}, par ${i.par_level}, variance ${i.variance}`).join('\n');
+      items.map(i => {
+        const costNote = i.unit_cost != null ? ` @ $${i.unit_cost.toFixed(2)}/${i.unit}` : ' (no unit cost set)';
+        return `  ${i.name}: counted ${i.count} ${i.unit}, par ${i.par_level}, variance ${i.variance}${costNote}`;
+      }).join('\n');
 
-    // One consolidated journal per reason type
-    // Amount = $0.01 placeholder per item — user updates with actual unit cost
-    const totalPlaceholder = +(items.length * 0.01).toFixed(2);
+    // Calculate total loss value using unit_cost where available.
+    // Items without a unit cost contribute $0.01 each as a placeholder —
+    // the user should update those lines in the journal editor.
+    let totalAmount     = 0;
+    let hasPlaceholders = false;
+    items.forEach(i => {
+      if (i.unit_cost != null && i.variance != null) {
+        // variance is negative (below par), so abs gives the shortfall qty
+        totalAmount += +(Math.abs(i.variance) * i.unit_cost).toFixed(2);
+      } else {
+        totalAmount += 0.01;
+        hasPlaceholders = true;
+      }
+    });
+    totalAmount = +totalAmount.toFixed(2);
+
+    const placeholderNote = hasPlaceholders
+      ? '\n\n⚠ Some items have no unit cost — $0.01 placeholder used. Edit this journal to enter actual amounts.'
+      : '';
 
     const lines = [
-      { account: '5120', debit: totalPlaceholder, credit: 0,                 narration: reasonLabels[reason] || reason },
-      { account: '1100', debit: 0,                credit: totalPlaceholder,  narration: 'Inventory adjustment' },
+      { account: '5120', debit: totalAmount, credit: 0,           narration: reasonLabels[reason] || reason },
+      { account: '1100', debit: 0,           credit: totalAmount, narration: 'Inventory adjustment' },
     ];
 
     const journal = {
       id:         uid(),
       date,
       ref:        ref + '-' + reason.slice(0, 3).toUpperCase(),
-      narration,
+      narration:  narration + placeholderNote,
       source:     'stocktake',
       session_id: session.id,
       lines:      lines.map((l, i) => ({ ...l, id: uid(), sort_order: i })),
@@ -963,12 +987,13 @@ function viewSession(id) {
     ${Object.entries(byCategory).sort(([a],[b]) => a.localeCompare(b)).map(([cat, catItems]) => `
       <div class="stk-category-header">${cat}</div>
       <div style="background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;margin-bottom:16px;overflow:hidden;">
-        <div style="display:grid;grid-template-columns:1fr 70px 70px 80px 80px 1fr;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:1fr 70px 70px 80px 80px 90px 1fr;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);">
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Par</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Count</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Variance</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Cost</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Reason</span>
         </div>
         ${catItems.map(item => {
@@ -992,7 +1017,7 @@ function viewSession(id) {
             data_entry: 'Data Entry', received: 'Stock Received',
           };
           return `
-            <div style="display:grid;grid-template-columns:1fr 70px 70px 80px 80px 1fr;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
+            <div style="display:grid;grid-template-columns:1fr 70px 70px 80px 80px 90px 1fr;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
               <div style="font-size:13px;font-weight:500;">${item.name}</div>
               <div style="font-size:12px;color:var(--text3);">${item.unit || '—'}</div>
               <div style="font-size:13px;font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</div>
@@ -1000,6 +1025,7 @@ function viewSession(id) {
               <div>
                 ${badgeCls ? `<span class="stk-variance-badge ${badgeCls}">${badgeText}</span>` : `<span style="font-size:12px;color:var(--text3);">${badgeText}</span>`}
               </div>
+              <div style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text2);">${item.unit_cost != null ? '$' + item.unit_cost.toFixed(2) : '—'}</div>
               <div style="font-size:12px;color:var(--text3);">${item.variance_reason ? (reasonLabels[item.variance_reason] || item.variance_reason) : '—'}</div>
             </div>
           `;
@@ -1020,7 +1046,7 @@ function exportVariancesCSV() {
   const session = _viewingSession;
   if (!session) return;
 
-  const rows   = [['Item', 'Category', 'Unit', 'Par Level', 'Count', 'Variance', 'Status', 'Reason']];
+  const rows   = [['Item', 'Category', 'Unit', 'Par Level', 'Unit Cost (AUD)', 'Count', 'Variance', 'Status', 'Reason']];
   const items  = session.items || [];
   const reasonLabels = {
     shrinkage: 'Shrinkage', wastage: 'Wastage', unaccounted: 'Unaccounted',
@@ -1042,6 +1068,7 @@ function exportVariancesCSV() {
       item.category || '',
       item.unit || '',
       item.par_level !== null ? item.par_level : '',
+      item.unit_cost !== null && item.unit_cost !== undefined ? item.unit_cost : '',
       item.count     !== null ? item.count     : '',
       item.variance  !== null ? item.variance  : '',
       status,
