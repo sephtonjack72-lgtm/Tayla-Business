@@ -364,28 +364,34 @@ function openSupplierModal(id) {
   document.getElementById('stk-supplier-phone').value     = s?.phone   || '';
   document.getElementById('stk-supplier-email').value     = s?.email   || '';
   document.getElementById('stk-supplier-notes').value     = s?.notes   || '';
+  document.getElementById('stk-supplier-lead-time').value = s?.lead_time_days ?? '';
+  document.getElementById('stk-supplier-terms').value     = s?.payment_terms || '';
   document.getElementById('stk-supplier-modal').classList.add('show');
   document.getElementById('stk-supplier-name').focus();
 }
 
 async function saveSupplier() {
-  const name    = document.getElementById('stk-supplier-name').value.trim();
-  const contact = document.getElementById('stk-supplier-contact').value.trim();
-  const phone   = document.getElementById('stk-supplier-phone').value.trim();
-  const email   = document.getElementById('stk-supplier-email').value.trim();
-  const notes   = document.getElementById('stk-supplier-notes').value.trim();
-  const editId  = document.getElementById('stk-supplier-edit-id').value;
+  const name      = document.getElementById('stk-supplier-name').value.trim();
+  const contact   = document.getElementById('stk-supplier-contact').value.trim();
+  const phone     = document.getElementById('stk-supplier-phone').value.trim();
+  const email     = document.getElementById('stk-supplier-email').value.trim();
+  const notes     = document.getElementById('stk-supplier-notes').value.trim();
+  const leadRaw   = document.getElementById('stk-supplier-lead-time').value;
+  const terms     = document.getElementById('stk-supplier-terms').value.trim();
+  const editId    = document.getElementById('stk-supplier-edit-id').value;
 
   if (!name) { toast('Supplier name is required'); return; }
 
   const supplier = {
-    id:           editId || uid(),
+    id:             editId || uid(),
     name,
-    contact_name: contact || null,
-    phone:        phone   || null,
-    email:        email   || null,
-    notes:        notes   || null,
-    created_at:   editId ? undefined : new Date().toISOString(),
+    contact_name:   contact || null,
+    phone:          phone   || null,
+    email:          email   || null,
+    notes:          notes   || null,
+    lead_time_days: leadRaw !== '' ? parseInt(leadRaw, 10) : null,
+    payment_terms:  terms   || null,
+    created_at:     editId ? undefined : new Date().toISOString(),
   };
   if (!editId) delete supplier.created_at;
 
@@ -1183,4 +1189,17 @@ if (typeof closeModal === 'undefined') {
   window.closeModal = function(id) {
     document.getElementById(id)?.classList.remove('show');
   };
+}
+
+// ══════════════════════════════════════════════════════
+//  SHARED HELPERS — used by ordering.js
+// ══════════════════════════════════════════════════════
+
+/**
+ * Returns the most recently submitted stocktake session,
+ * or null if none exists. Used by the Ordering module to
+ * auto-populate suggested orders.
+ */
+function getLatestSubmittedSession() {
+  return stocktakeSessions.find(s => s.status === 'submitted') || null;
 }
