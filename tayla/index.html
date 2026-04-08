@@ -433,6 +433,7 @@
       <div class="dropdown-item" onclick="showPage('receipts-page');closeInvoicesMenu()">Receipts</div>
     </div>
   </div>
+  <div class="tab" onclick="showPage('stocktake-page')">Stocktake</div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
@@ -2219,7 +2220,331 @@
 
 </div><!-- /receipts-page -->
 
+<!-- ══════════════════ STOCKTAKE ══════════════════ -->
+<div id="stocktake-page" class="page">
+
+  <!-- KPI strip -->
+  <div class="kpi-grid" id="stk-kpi-strip"></div>
+
+  <!-- Sub-tab bar -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;border:1px solid var(--border);border-bottom:none;">
+    <button class="stk-tab active" id="stktab-catalogue"
+      onclick="showStocktakeTab('catalogue')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Item Catalogue
+    </button>
+    <button class="stk-tab" id="stktab-newcount"
+      onclick="showStocktakeTab('newcount')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      New Count
+    </button>
+    <button class="stk-tab" id="stktab-history"
+      onclick="showStocktakeTab('history')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      History
+    </button>
+  </div>
+
+  <!-- ── CATALOGUE TAB ── -->
+  <div id="stk-catalogue">
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start;" class="responsive-2col">
+
+      <!-- Item list -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Stock Items</span>
+          <div class="flex-gap">
+            <input type="text" id="stk-item-search" placeholder="Search items…"
+              style="width:180px;" oninput="renderCatalogue()">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);text-transform:none;letter-spacing:0;font-weight:400;cursor:pointer;">
+              <input type="checkbox" id="stk-show-archived" onchange="renderCatalogue()" style="width:auto;padding:0;border:none;">
+              Show archived
+            </label>
+            <button class="btn btn-primary btn-sm" onclick="openItemModal()">+ Add Item</button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <!-- Column headers -->
+          <div style="display:grid;grid-template-columns:1fr 90px 80px 100px 80px;gap:10px;padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Item</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Unit</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Par Level</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Supplier</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);text-align:right;">Actions</span>
+          </div>
+          <div id="stk-items-list">
+            <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No items yet — add your first stock item.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suppliers panel -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Suppliers</span>
+          <button class="btn btn-primary btn-sm" onclick="openSupplierModal()">+ Add Supplier</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div id="stk-suppliers-list">
+            <div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">No suppliers yet.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /stk-catalogue -->
+
+  <!-- ── NEW COUNT TAB ── -->
+  <div id="stk-newcount" style="display:none;">
+
+    <!-- Session header — shown when no active session -->
+    <div id="stk-session-start" class="card" style="max-width:560px;margin:0 auto;">
+      <div class="card-header"><span class="card-title">Start Stocktake</span></div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="stk-session-date">
+          </div>
+          <div class="form-group">
+            <label>Staff Member</label>
+            <input type="text" id="stk-session-staff" placeholder="Your name">
+          </div>
+          <div class="form-group full">
+            <label>Notes (optional)</label>
+            <input type="text" id="stk-session-notes" placeholder="e.g. End of week count">
+          </div>
+        </div>
+        <div style="margin-top:16px;padding:12px 16px;background:var(--surface2);border-radius:8px;font-size:13px;color:var(--text2);">
+          <strong id="stk-item-count-hint">0 active items</strong> will appear in the count sheet, grouped by category.
+        </div>
+        <button class="btn btn-primary mt" style="width:100%;" onclick="startStocktake()">
+          Start Count
+        </button>
+      </div>
+    </div>
+
+    <!-- Active count sheet — shown when session is in progress -->
+    <div id="stk-count-sheet" style="display:none;">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header flex-between">
+          <div>
+            <div class="card-title" id="stk-count-title">Stocktake — </div>
+            <div class="text-sm" id="stk-count-subtitle"></div>
+          </div>
+          <div class="flex-gap">
+            <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="startBarcodeScanner()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="5" height="5"/><rect x="16" y="3" width="5" height="5"/><rect x="3" y="16" width="5" height="5"/><line x1="21" y1="16" x2="21" y2="21"/><line x1="16" y1="21" x2="21" y2="21"/><line x1="11" y1="3" x2="11" y2="11"/><line x1="11" y1="11" x2="3" y2="11"/><line x1="11" y1="11" x2="11" y2="21"/><line x1="11" y1="21" x2="16" y2="21"/><line x1="16" y1="11" x2="21" y2="11"/><line x1="16" y1="11" x2="16" y2="16"/></svg>
+              Scan Barcode
+            </button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="saveCountProgress()">Save Progress</button>
+            <button class="btn btn-primary btn-sm" onclick="confirmSubmitStocktake()">Submit Count</button>
+          </div>
+        </div>
+        <!-- Count sheet progress bar -->
+        <div style="padding:0 24px 16px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:6px;">
+            <span id="stk-progress-label">0 of 0 items counted</span>
+            <span id="stk-progress-pct">0%</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden;">
+            <div id="stk-progress-bar" style="height:100%;background:var(--accent2);border-radius:99px;transition:width .3s;width:0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column headers for count sheet -->
+      <div style="display:grid;grid-template-columns:1fr 90px 80px 100px;gap:10px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius) var(--radius) 0 0;border-bottom:none;">
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Item</span>
+        <span class="stk-unit-col" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Unit</span>
+        <span class="stk-par-col" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Par Level</span>
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);text-align:right;">Count</span>
+      </div>
+      <div class="card" style="border-radius:0 0 var(--radius) var(--radius);">
+        <div id="stk-count-rows" style="padding:0;"></div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-end;">
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="saveCountProgress()">Save Progress</button>
+        <button class="btn btn-primary" onclick="confirmSubmitStocktake()">Submit Count</button>
+      </div>
+    </div>
+
+  </div><!-- /stk-newcount -->
+
+  <!-- ── HISTORY TAB ── -->
+  <div id="stk-history" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Stocktake History</span>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div id="stk-session-list">
+          <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No stocktakes recorded yet.</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /stk-history -->
+
+</div><!-- /stocktake-page -->
+
 </main><!-- /main -->
+
+<!-- ══════════ STOCKTAKE MODALS ══════════ -->
+
+<!-- Item modal -->
+<div class="modal-overlay" id="stk-item-modal">
+  <div class="modal" style="width:520px;max-width:96vw;">
+    <h3 id="stk-item-modal-title">Add Stock Item</h3>
+    <input type="hidden" id="stk-item-edit-id">
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Item Name <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="stk-item-name" placeholder="e.g. Absolut Vodka 700ml">
+      </div>
+      <div class="form-group">
+        <label>Category <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="stk-item-category" placeholder="e.g. Spirits, Beer, Food" list="stk-category-list">
+        <datalist id="stk-category-list"></datalist>
+      </div>
+      <div class="form-group">
+        <label>Unit of Measure</label>
+        <select id="stk-item-unit">
+          <option value="bottles">Bottles</option>
+          <option value="cans">Cans</option>
+          <option value="kegs">Kegs</option>
+          <option value="litres">Litres</option>
+          <option value="kg">kg</option>
+          <option value="portions">Portions</option>
+          <option value="cases">Cases</option>
+          <option value="units">Units</option>
+          <option value="packs">Packs</option>
+          <option value="bags">Bags</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Par Level</label>
+        <input type="number" id="stk-item-par" placeholder="0" min="0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>Barcode (optional)</label>
+        <input type="text" id="stk-item-barcode" placeholder="Scan or type barcode">
+      </div>
+      <div class="form-group">
+        <label>Supplier</label>
+        <select id="stk-item-supplier">
+          <option value="">— None —</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('stk-item-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveStockItem()">Save Item</button>
+    </div>
+  </div>
+</div>
+
+<!-- Supplier modal -->
+<div class="modal-overlay" id="stk-supplier-modal">
+  <div class="modal" style="width:480px;max-width:96vw;">
+    <h3 id="stk-supplier-modal-title">Add Supplier</h3>
+    <input type="hidden" id="stk-supplier-edit-id">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label>Supplier Name <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="stk-supplier-name" placeholder="e.g. ALM, Liquorland Wholesale">
+      </div>
+      <div class="form-group">
+        <label>Contact Name</label>
+        <input type="text" id="stk-supplier-contact" placeholder="Rep name">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="tel" id="stk-supplier-phone" placeholder="04xx xxx xxx">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="stk-supplier-email" placeholder="orders@supplier.com.au">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input type="text" id="stk-supplier-notes" placeholder="e.g. Order by Wednesday for Friday delivery">
+      </div>
+    </div>
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('stk-supplier-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveSupplier()">Save Supplier</button>
+    </div>
+  </div>
+</div>
+
+<!-- Variance reason modal -->
+<div class="modal-overlay" id="stk-variance-modal">
+  <div class="modal" style="width:560px;max-width:96vw;">
+    <h3>Variance Reasons</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:18px;">
+      Some items are below par. Please categorise each negative variance before submitting.
+    </p>
+    <div id="stk-variance-reason-rows" style="max-height:360px;overflow-y:auto;"></div>
+    <div id="stk-variance-modal-error" style="display:none;margin-top:12px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;"></div>
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('stk-variance-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="finaliseStocktake()">Submit &amp; Post Journals</button>
+    </div>
+  </div>
+</div>
+
+<!-- Session detail overlay -->
+<div class="modal-overlay" id="stk-session-detail-modal">
+  <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <h3 id="stk-detail-title" style="margin-bottom:4px;">Stocktake Detail</h3>
+        <div id="stk-detail-subtitle" style="font-size:13px;color:var(--text3);"></div>
+      </div>
+      <div class="flex-gap">
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="exportVariancesCSV()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);" id="stk-void-btn" onclick="voidSession()">Void Session</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('stk-session-detail-modal')">Close</button>
+      </div>
+    </div>
+    <!-- Summary KPIs -->
+    <div class="kpi-grid" id="stk-detail-kpis" style="margin-bottom:20px;"></div>
+    <!-- Variance table -->
+    <div id="stk-detail-table"></div>
+  </div>
+</div>
+
+<!-- Barcode scanner overlay -->
+<div id="stk-scanner-overlay" class="stk-scanner-overlay" style="display:none;">
+  <div style="color:#fff;font-size:16px;font-weight:600;text-align:center;padding:0 20px;">
+    Point camera at a barcode
+  </div>
+  <div class="stk-scanner-viewfinder">
+    <video id="stk-scanner-video" autoplay playsinline muted style="width:100%;border-radius:12px;border:3px solid var(--accent2);display:block;"></video>
+    <div class="stk-scanner-reticle"></div>
+  </div>
+  <div id="stk-scanner-status" style="color:var(--accent2);font-size:13px;font-weight:500;text-align:center;min-height:20px;padding:0 20px;"></div>
+  <button class="btn btn-ghost" style="color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="stopBarcodeScanner()">Cancel</button>
+</div>
+
+<!-- Confirm submit modal -->
+<div class="modal-overlay" id="stk-submit-confirm-modal">
+  <div class="modal" style="width:420px;max-width:96vw;">
+    <h3>Submit Stocktake?</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:8px;">
+      This will finalise the count and automatically post journal entries for any variances.
+    </p>
+    <div id="stk-submit-summary" style="background:var(--surface2);border-radius:8px;padding:14px;font-size:13px;margin-bottom:20px;line-height:2;"></div>
+    <div class="flex-gap" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('stk-submit-confirm-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="openVarianceReasonModal()">Continue</button>
+    </div>
+  </div>
+</div>
 
 <!-- ADD SOFTWARE MODAL -->
 <div class="modal-overlay" id="add-software-modal">
@@ -2405,6 +2730,7 @@
 <script src="receipts.js"></script>
 <script src="members.js"></script>
 <script src="import.js"></script>
+<script src="stocktake.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
