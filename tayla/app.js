@@ -123,6 +123,9 @@ function applyProfileToApp(profile) {
       if (typeof dbLoadSuppliers   === 'function') dbLoadSuppliers();
       if (typeof dbLoadStockItems  === 'function') dbLoadStockItems();
       if (typeof dbLoadStocktakeSessions === 'function') dbLoadStocktakeSessions();
+      if (typeof dbLoadPurchaseOrders === 'function') dbLoadPurchaseOrders();
+      if (typeof dbLoadStandingOrders === 'function') dbLoadStandingOrders();
+      if (typeof checkDueStandingOrders === 'function') setTimeout(checkDueStandingOrders, 2000);
       renderAll();
       // Re-render software settings after data is available
       setTimeout(() => renderSoftwareSettings(), 500);
@@ -761,6 +764,14 @@ function showPage(id) {
       return;
     }
     showStocktakeTab('catalogue');
+  }
+  if (id === 'ordering-page' && typeof showOrderingTab === 'function') {
+    const bizType = _businessProfile?.biz_type || appSettings?.bizModel || '';
+    if (!['hospitality','retail'].includes(bizType)) {
+      toast('Ordering is available for Hospitality and Retail businesses only');
+      return;
+    }
+    showOrderingTab('suggested');
   }
   if (id === 'settings-page') renderSoftwareSettings();
   renderAll();
@@ -3455,10 +3466,11 @@ function onBizModelChange() {
 }
 
 function updateStocktakeNavVisibility(bizType) {
-  const tab = document.getElementById('nav-stocktake-tab');
-  if (!tab) return;
   const allowed = ['hospitality', 'retail'];
-  tab.style.display = allowed.includes(bizType) ? '' : 'none';
+  const stkTab = document.getElementById('nav-stocktake-tab');
+  if (stkTab) stkTab.style.display = allowed.includes(bizType) ? '' : 'none';
+  const ordTab = document.getElementById('nav-ordering-tab');
+  if (ordTab) ordTab.style.display = allowed.includes(bizType) ? '' : 'none';
 }
 
 function toggleUserMenu() {
