@@ -93,6 +93,7 @@ function applyProfileToApp(profile) {
     if (bn) bn.value = profile.biz_name;
     const bm = document.getElementById('setting-biz-model');
     if (bm) { bm.value = profile.biz_type || 'saas'; onBizModelChange(); }
+    if (typeof updateStocktakeNavVisibility === 'function') updateStocktakeNavVisibility(profile.biz_type || 'saas');
   }
 
   // Show user email in header
@@ -276,7 +277,7 @@ async function signOut() {
 // ══════════════════════════════════════════════════════
 const BIZ_TYPES = [
   { id: 'saas',     icon: '💻', title: 'SaaS',            desc: 'Subscription software — MRR, tiers, churn' },
-  { id: 'hospitality', icon: '🍽', title: 'Hospitality',  desc: 'Cafés, restaurants, bars — covers, revenue per table' },
+  { id: 'hospitality', icon: '🍽', title: 'Hospitality',  desc: 'Cafés, restaurants, bars — sales, COGS, stock tracking' },
   { id: 'retail',   icon: '🛍', title: 'Retail',           desc: 'Products & e-commerce — inventory, COGS, margin' },
   { id: 'professional', icon: '💼', title: 'Professional Services', desc: 'Agency, consulting, freelance — hourly or project billing' },
 ];
@@ -753,7 +754,14 @@ function showPage(id) {
   if (id === 'bills-page'     && typeof showBillTab    === 'function') showBillTab('list');
   if (id === 'assets-page'    && typeof showAssetTab   === 'function') showAssetTab('register');
   if (id === 'receipts-page'  && typeof showReceiptTab === 'function') showReceiptTab('upload');
-  if (id === 'stocktake-page' && typeof showStocktakeTab === 'function') showStocktakeTab('catalogue');
+  if (id === 'stocktake-page' && typeof showStocktakeTab === 'function') {
+    const bizType = _businessProfile?.biz_type || appSettings?.bizModel || '';
+    if (!['hospitality','retail'].includes(bizType)) {
+      toast('Stocktake is available for Hospitality and Retail businesses only');
+      return;
+    }
+    showStocktakeTab('catalogue');
+  }
   if (id === 'settings-page') renderSoftwareSettings();
   renderAll();
 }
@@ -3443,6 +3451,14 @@ function onBizModelChange() {
     const el = document.getElementById('model-detail-' + m);
     if (el) el.style.display = m === model ? 'block' : 'none';
   });
+  updateStocktakeNavVisibility(model);
+}
+
+function updateStocktakeNavVisibility(bizType) {
+  const tab = document.getElementById('nav-stocktake-tab');
+  if (!tab) return;
+  const allowed = ['hospitality', 'retail'];
+  tab.style.display = allowed.includes(bizType) ? '' : 'none';
 }
 
 function toggleUserMenu() {
