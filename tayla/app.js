@@ -94,6 +94,7 @@ function applyProfileToApp(profile) {
     const bm = document.getElementById('setting-biz-model');
     if (bm) { bm.value = profile.biz_type || 'saas'; onBizModelChange(); }
     if (typeof updateStocktakeNavVisibility === 'function') updateStocktakeNavVisibility(profile.biz_type || 'saas');
+    loadEmailSettings(profile);
   }
 
   // Show user email in header
@@ -3406,6 +3407,70 @@ function getBankDetails() {
   return JSON.parse(localStorage.getItem('bankDetails') || '{}');
 }
 
+// ══════════════════════════════════════════════════════
+//  EMAIL SETTINGS
+//  Stored in localStorage + mirrored to businesses table
+//  email_from: custom from address (Option 3, optional)
+//  email_reply_to: reply-to address (defaults to biz_email)
+// ══════════════════════════════════════════════════════
+
+function saveEmailSettings() {
+  const emailFrom    = document.getElementById('setting-email-from')?.value.trim()    || '';
+  const emailReplyTo = document.getElementById('setting-email-reply-to')?.value.trim() || '';
+  const settings     = { emailFrom, emailReplyTo };
+  localStorage.setItem('emailSettings', JSON.stringify(settings));
+
+  // Persist to businesses table so it survives across devices
+  if (_businessId) {
+    _supabase.from('businesses').update({
+      email_from:     emailFrom    || null,
+      email_reply_to: emailReplyTo || null,
+      updated_at:     new Date().toISOString(),
+    }).eq('id', _businessId).then(({ error }) => {
+      const statusEl = document.getElementById('setting-email-status');
+      if (statusEl) {
+        if (error) {
+          statusEl.style.background = '#fde2e2';
+          statusEl.style.color      = 'var(--danger)';
+          statusEl.textContent      = 'Failed to save: ' + error.message;
+        } else {
+          statusEl.style.background = '#d4edda';
+          statusEl.style.color      = 'var(--success)';
+          statusEl.textContent      = 'Email settings saved ✓';
+          setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
+        }
+        statusEl.style.display = 'block';
+      }
+    });
+  }
+}
+
+function loadEmailSettings(profile) {
+  // Prefer values from Supabase profile if available, fall back to localStorage
+  const local = JSON.parse(localStorage.getItem('emailSettings') || '{}');
+  const emailFrom    = profile?.email_from     ?? local.emailFrom    ?? '';
+  const emailReplyTo = profile?.email_reply_to ?? local.emailReplyTo ?? profile?.biz_email ?? '';
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  set('setting-email-from',     emailFrom);
+  set('setting-email-reply-to', emailReplyTo);
+  // Keep localStorage in sync
+  localStorage.setItem('emailSettings', JSON.stringify({ emailFrom, emailReplyTo }));
+}
+
+function getEmailSettings() {
+  // Returns the resolved from/reply-to for use when sending emails
+  const profile  = _businessProfile || {};
+  const local    = JSON.parse(localStorage.getItem('emailSettings') || '{}');
+  const emailFrom    = profile.email_from     || local.emailFrom    || '';
+  const emailReplyTo = profile.email_reply_to || local.emailReplyTo || profile.biz_email || '';
+  return {
+    from:    emailFrom    || 'noreply@usetayla.com.au',
+    replyTo: emailReplyTo || '',
+    // Flag whether this is the default Tayla address or a custom one
+    isCustom: !!(emailFrom && emailFrom !== 'noreply@usetayla.com.au'),
+  };
+}
+
 // ── Invoice reminders
 function sendInvoiceReminder(invoiceId) {
   const inv     = (typeof invoices !== 'undefined' ? invoices : []).find(i => i.id === invoiceId);
@@ -3448,6 +3513,7 @@ function loadSettings() {
   renderSettingsProfilePreview();
   if (typeof initCurrencyUI === 'function') initCurrencyUI();
   loadBankDetails();
+  loadEmailSettings(_businessProfile);
 }
 
 function syncEntityName() {
