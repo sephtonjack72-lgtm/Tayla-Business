@@ -166,9 +166,9 @@ function renderStkKpis() {
   // Calculate average variance rate from last submitted session
   let varianceRate = '—';
   if (lastSession) {
-    const items     = lastSession.items || [];
-    const varItems  = items.filter(i => i.variance !== undefined && i.variance < 0).length;
-    const total     = items.length;
+    const items    = lastSession.items || [];
+    const varItems = items.filter(i => i.variance !== undefined && i.variance !== null && i.variance < 0).length;
+    const total    = items.filter(i => i.count !== null).length;
     if (total > 0) varianceRate = Math.round((varItems / total) * 100) + '%';
   }
 
@@ -245,6 +245,11 @@ function renderCatalogue() {
             ${item.barcode ? `<div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${item.barcode}</div>` : ''}
           </div>
           <div style="width:90px;font-size:12px;color:var(--text2);">${item.unit || 'units'}</div>
+          <div style="width:80px;font-size:12px;font-family:'DM Mono',monospace;font-weight:600;color:${
+            item.on_hand != null && item.par_level != null
+              ? (item.on_hand <= item.par_level ? 'var(--danger)' : 'var(--success)')
+              : 'var(--text2)'
+          };">${item.on_hand ?? '—'}</div>
           <div style="width:80px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</div>
           <div style="width:100px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.unit_cost != null ? '$' + item.unit_cost.toFixed(2) : '—'}</div>
           <div style="width:100px;font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${supplier?.name || '—'}</div>
@@ -268,13 +273,15 @@ function renderCatalogue() {
 function openItemModal(id) {
   const item = id ? stockItems.find(i => i.id === id) : null;
   document.getElementById('stk-item-modal-title').textContent = item ? 'Edit Stock Item' : 'Add Stock Item';
-  document.getElementById('stk-item-edit-id').value  = item?.id  || '';
-  document.getElementById('stk-item-name').value     = item?.name || '';
-  document.getElementById('stk-item-category').value = item?.category || '';
-  document.getElementById('stk-item-unit').value     = item?.unit || 'bottles';
-  document.getElementById('stk-item-par').value      = item?.par_level ?? '';
-  document.getElementById('stk-item-cost').value     = item?.unit_cost ?? '';
-  document.getElementById('stk-item-barcode').value  = item?.barcode || '';
+  document.getElementById('stk-item-edit-id').value    = item?.id  || '';
+  document.getElementById('stk-item-name').value       = item?.name || '';
+  document.getElementById('stk-item-category').value   = item?.category || '';
+  document.getElementById('stk-item-unit').value       = item?.unit || 'bottles';
+  document.getElementById('stk-item-par').value        = item?.par_level ?? '';
+  document.getElementById('stk-item-on-hand').value    = item?.on_hand ?? '';
+  document.getElementById('stk-item-cost').value       = item?.unit_cost ?? '';
+  document.getElementById('stk-item-upt').value        = item?.upt ?? '';
+  document.getElementById('stk-item-barcode').value    = item?.barcode || '';
 
   // Populate category datalist
   const dl = document.getElementById('stk-category-list');
@@ -296,11 +303,13 @@ async function saveStockItem() {
   const name     = document.getElementById('stk-item-name').value.trim();
   const category = document.getElementById('stk-item-category').value.trim();
   const unit     = document.getElementById('stk-item-unit').value;
-  const parRaw   = document.getElementById('stk-item-par').value;
-  const costRaw  = document.getElementById('stk-item-cost').value;
-  const barcode  = document.getElementById('stk-item-barcode').value.trim();
-  const supplier = document.getElementById('stk-item-supplier').value;
-  const editId   = document.getElementById('stk-item-edit-id').value;
+  const parRaw     = document.getElementById('stk-item-par').value;
+  const onHandRaw  = document.getElementById('stk-item-on-hand').value;
+  const costRaw    = document.getElementById('stk-item-cost').value;
+  const uptRaw     = document.getElementById('stk-item-upt').value;
+  const barcode    = document.getElementById('stk-item-barcode').value.trim();
+  const supplier   = document.getElementById('stk-item-supplier').value;
+  const editId     = document.getElementById('stk-item-edit-id').value;
 
   if (!name)     { toast('Item name is required'); return; }
   if (!category) { toast('Category is required'); return; }
@@ -310,8 +319,10 @@ async function saveStockItem() {
     name,
     category,
     unit,
-    par_level:   parRaw  !== '' ? parseFloat(parRaw)  : null,
-    unit_cost:   costRaw !== '' ? parseFloat(costRaw) : null,
+    par_level:   parRaw     !== '' ? parseFloat(parRaw)    : null,
+    on_hand:     onHandRaw  !== '' ? parseFloat(onHandRaw) : null,
+    unit_cost:   costRaw    !== '' ? parseFloat(costRaw)   : null,
+    upt:         uptRaw     !== '' ? parseFloat(uptRaw)    : null,
     barcode:     barcode || null,
     supplier_id: supplier || null,
     archived:    false,
@@ -493,6 +504,7 @@ function startStocktake() {
     category:  item.category,
     unit:      item.unit,
     par_level: item.par_level,
+    on_hand:   item.on_hand ?? null,   // opening on-hand at time of count
     unit_cost: item.unit_cost ?? null,
     count:     null,
     variance:  null,
@@ -545,12 +557,13 @@ function renderCountSheet() {
     ${items.map((item, _i) => {
       const counted = item.count !== null && item.count !== undefined && item.count !== '';
       return `
-        <div class="stk-count-row ${counted ? '' : ''}" id="stk-row-${item.item_id}">
+        <div class="stk-count-row" id="stk-row-${item.item_id}">
           <div>
             <div style="font-size:13px;font-weight:${counted ? '500' : '400'};color:${counted ? 'var(--text)' : 'var(--text2)'};">${item.name}</div>
+            ${item.par_level != null ? `<div style="font-size:11px;color:var(--text3);">Par: ${item.par_level}</div>` : ''}
           </div>
           <span class="stk-unit-col" style="font-size:12px;color:var(--text3);">${item.unit || 'units'}</span>
-          <span class="stk-par-col" style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</span>
+          <span class="stk-par-col" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--text2);">${item.on_hand ?? '—'}</span>
           <input
             type="number"
             min="0"
@@ -623,8 +636,9 @@ function confirmSubmitStocktake() {
   const items      = _activeSession.items || [];
   const counted    = items.filter(i => i.count !== null).length;
   const uncounted  = items.filter(i => i.count === null).length;
-  const belowPar   = items.filter(i => i.count !== null && i.par_level !== null && i.count < i.par_level).length;
-  const abovePar   = items.filter(i => i.count !== null && i.par_level !== null && i.count > i.par_level).length;
+  // Variance vs on_hand (not par) — items where count < on_hand = shrinkage
+  const belowOnHand = items.filter(i => i.count !== null && i.on_hand !== null && i.count < i.on_hand).length;
+  const aboveOnHand = items.filter(i => i.count !== null && i.on_hand !== null && i.count > i.on_hand).length;
   const zeroStock  = items.filter(i => i.count !== null && i.count === 0).length;
 
   const summaryEl = document.getElementById('stk-submit-summary');
@@ -634,11 +648,11 @@ function confirmSubmitStocktake() {
         <span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Counted</span>
         <span style="font-weight:600;">${counted} of ${items.length} items</span>
         ${uncounted > 0 ? `<span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Uncounted</span>
-        <span style="color:var(--danger);font-weight:600;">${uncounted} items (will be recorded as no count)</span>` : ''}
-        <span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Below Par</span>
-        <span style="color:${belowPar > 0 ? 'var(--danger)' : 'var(--success)'};">${belowPar} items</span>
-        <span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Above Par</span>
-        <span style="color:var(--success);">${abovePar} items</span>
+        <span style="color:var(--danger);font-weight:600;">${uncounted} items (will not update on-hand)</span>` : ''}
+        <span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Below On Hand</span>
+        <span style="color:${belowOnHand > 0 ? 'var(--danger)' : 'var(--success)'};">${belowOnHand} items (unexplained loss)</span>
+        <span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Above On Hand</span>
+        <span style="color:var(--success);">${aboveOnHand} items (surplus found)</span>
         <span style="color:var(--text3);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">Zero Stock</span>
         <span style="color:${zeroStock > 0 ? 'var(--danger)' : 'var(--text)'};">${zeroStock} items</span>
       </div>
@@ -663,8 +677,10 @@ function openVarianceReasonModal() {
     }
   });
 
-  // Only negative variances need reasons
-  const negItems = items.filter(i => i.variance !== null && i.variance < 0);
+  // Only items where count < on_hand need a reason (actual shrinkage/loss)
+  const negItems = items.filter(i =>
+    i.count !== null && i.on_hand !== null && i.count < i.on_hand
+  );
 
   if (!negItems.length) {
     // No negative variances — go straight to finalise
@@ -674,20 +690,24 @@ function openVarianceReasonModal() {
 
   const container = document.getElementById('stk-variance-reason-rows');
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 80px 80px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px;">
+    <div style="display:grid;grid-template-columns:1fr 80px 80px 80px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px;">
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
-      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Par</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">On Hand</span>
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Count</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Diff</span>
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Reason</span>
     </div>
-    ${negItems.map(item => `
-      <div style="display:grid;grid-template-columns:1fr 80px 80px 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+    ${negItems.map(item => {
+      const diff = +(item.count - item.on_hand).toFixed(3);
+      return `
+      <div style="display:grid;grid-template-columns:1fr 80px 80px 80px 1fr;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
         <div>
           <div style="font-size:13px;font-weight:500;">${item.name}</div>
           <div style="font-size:11px;color:var(--text3);">${item.category}</div>
         </div>
-        <span style="font-size:13px;font-family:'DM Mono',monospace;">${item.par_level}</span>
-        <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--danger);">${item.count} <span style="font-size:11px;">(${item.variance > 0 ? '+' : ''}${item.variance})</span></span>
+        <span style="font-size:13px;font-family:'DM Mono',monospace;">${item.on_hand}</span>
+        <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--danger);">${item.count}</span>
+        <span style="font-size:13px;font-family:'DM Mono',monospace;color:var(--danger);">${diff}</span>
         <select data-item-id="${item.item_id}"
           style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);color:var(--text);">
           <option value="">Select reason…</option>
@@ -698,7 +718,7 @@ function openVarianceReasonModal() {
           <option value="received">Stock received — not entered</option>
         </select>
       </div>
-    `).join('')}
+    `}).join('')}
   `;
 
   document.getElementById('stk-variance-modal-error').style.display = 'none';
@@ -725,16 +745,35 @@ async function finaliseStocktake() {
 
   closeModal('stk-variance-modal');
 
-  // Recalculate all variances with final values
+  // Recalculate all variances — counted vs on_hand (not par)
   const items = _activeSession.items || [];
   items.forEach(item => {
-    if (item.count !== null && item.par_level !== null) {
-      item.variance = +(item.count - item.par_level).toFixed(3);
+    if (item.count !== null) {
+      // Variance = what was physically found minus what we expected to be there
+      const baseline = item.on_hand ?? null;
+      item.variance  = baseline !== null ? +(item.count - baseline).toFixed(3) : null;
     }
   });
 
-  // Post journal entries
+  // Post journal entries (uses variance for loss calculation)
   const journalIds = await postStocktakeJournals(_activeSession);
+
+  // Finalise session
+  _activeSession.status       = 'submitted';
+  _activeSession.submitted_at = new Date().toISOString();
+  _activeSession.journal_ids  = journalIds;
+
+  await dbSaveStocktakeSession(_activeSession);
+
+  // Hard-reset on_hand for every counted item to the physical count
+  // This is the ground-truth reconcile: what was found IS the new on_hand
+  for (const sessionItem of items) {
+    if (sessionItem.count === null) continue;
+    const catalogueItem = stockItems.find(i => i.id === sessionItem.item_id);
+    if (!catalogueItem) continue;
+    catalogueItem.on_hand = sessionItem.count;
+    await dbSaveStockItem(catalogueItem);
+  }
 
   // Finalise session
   _activeSession.status       = 'submitted';
@@ -814,7 +853,7 @@ async function postStocktakeJournals(session) {
     const narration = `Stocktake ${date} (${session.staff_name}) — ${reasonLabels[reason] || reason}:\n` +
       items.map(i => {
         const costNote = i.unit_cost != null ? ` @ $${i.unit_cost.toFixed(2)}/${i.unit}` : ' (no unit cost set)';
-        return `  ${i.name}: counted ${i.count} ${i.unit}, par ${i.par_level}, variance ${i.variance}${costNote}`;
+        return `  ${i.name}: on-hand ${i.on_hand ?? '?'} → counted ${i.count} ${i.unit}, variance ${i.variance}${costNote}`;
       }).join('\n');
 
     // Calculate total loss value using unit_cost where available.
@@ -958,8 +997,8 @@ function viewSession(id) {
 
   const items    = session.items || [];
   const counted  = items.filter(i => i.count !== null).length;
-  const belowPar = items.filter(i => i.variance !== null && i.variance < 0).length;
-  const abovePar = items.filter(i => i.variance !== null && i.variance > 0).length;
+  const belowOnHand = items.filter(i => i.variance !== null && i.variance < 0).length;
+  const aboveOnHand = items.filter(i => i.variance !== null && i.variance > 0).length;
   const zeroStock= items.filter(i => i.count !== null && i.count === 0).length;
 
   document.getElementById('stk-detail-title').textContent =
@@ -971,8 +1010,8 @@ function viewSession(id) {
   // KPIs
   document.getElementById('stk-detail-kpis').innerHTML = `
     <div class="kpi"><div class="kpi-label">Items Counted</div><div class="kpi-value">${counted}</div><div class="kpi-sub">of ${items.length} total</div></div>
-    <div class="kpi"><div class="kpi-label">Below Par</div><div class="kpi-value ${belowPar > 0 ? 'negative' : ''}">${belowPar}</div><div class="kpi-sub">items with shortage</div></div>
-    <div class="kpi"><div class="kpi-label">Above Par</div><div class="kpi-value ${abovePar > 0 ? 'positive' : ''}">${abovePar}</div><div class="kpi-sub">items with surplus</div></div>
+    <div class="kpi"><div class="kpi-label">Below On Hand</div><div class="kpi-value ${belowOnHand > 0 ? 'negative' : ''}">${belowOnHand}</div><div class="kpi-sub">unexplained loss</div></div>
+    <div class="kpi"><div class="kpi-label">Above On Hand</div><div class="kpi-value ${aboveOnHand > 0 ? 'positive' : ''}">${aboveOnHand}</div><div class="kpi-sub">surplus found</div></div>
     <div class="kpi"><div class="kpi-label">Zero Stock</div><div class="kpi-value ${zeroStock > 0 ? 'negative' : ''}">${zeroStock}</div><div class="kpi-sub">empty items</div></div>
   `;
 
@@ -996,7 +1035,7 @@ function viewSession(id) {
         <div style="display:grid;grid-template-columns:1fr 70px 70px 80px 80px 90px 1fr;gap:8px;padding:8px 14px;background:var(--surface2);border-bottom:1px solid var(--border);">
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit</span>
-          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Par</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">On Hand</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Count</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Variance</span>
           <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Cost</span>
@@ -1010,11 +1049,11 @@ function viewSession(id) {
           } else if (item.count === 0) {
             badgeCls = 'stk-variance-zero'; badgeText = 'Zero Stock';
           } else if (v === null) {
-            badgeCls = ''; badgeText = 'No par set';
+            badgeCls = ''; badgeText = 'No on-hand set';
           } else if (v < 0) {
             badgeCls = 'stk-variance-under'; badgeText = String(v);
           } else if (v === 0) {
-            badgeCls = 'stk-variance-ok'; badgeText = 'On par';
+            badgeCls = 'stk-variance-ok'; badgeText = 'Matches';
           } else {
             badgeCls = 'stk-variance-over'; badgeText = '+' + v;
           }
@@ -1026,7 +1065,7 @@ function viewSession(id) {
             <div style="display:grid;grid-template-columns:1fr 70px 70px 80px 80px 90px 1fr;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);">
               <div style="font-size:13px;font-weight:500;">${item.name}</div>
               <div style="font-size:12px;color:var(--text3);">${item.unit || '—'}</div>
-              <div style="font-size:13px;font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</div>
+              <div style="font-size:13px;font-family:'DM Mono',monospace;">${item.on_hand ?? '—'}</div>
               <div style="font-size:13px;font-family:'DM Mono',monospace;">${item.count !== null ? item.count : '—'}</div>
               <div>
                 ${badgeCls ? `<span class="stk-variance-badge ${badgeCls}">${badgeText}</span>` : `<span style="font-size:12px;color:var(--text3);">${badgeText}</span>`}
@@ -1052,7 +1091,7 @@ function exportVariancesCSV() {
   const session = _viewingSession;
   if (!session) return;
 
-  const rows   = [['Item', 'Category', 'Unit', 'Par Level', 'Unit Cost (AUD)', 'Count', 'Variance', 'Status', 'Reason']];
+  const rows   = [['Item', 'Category', 'Unit', 'On Hand (Opening)', 'Par Level', 'Unit Cost (AUD)', 'Count', 'Variance', 'Status', 'Reason']];
   const items  = session.items || [];
   const reasonLabels = {
     shrinkage: 'Shrinkage', wastage: 'Wastage', unaccounted: 'Unaccounted',
@@ -1062,21 +1101,22 @@ function exportVariancesCSV() {
   // Sort by category then name
   [...items].sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || '')).forEach(item => {
     let status;
-    if (item.count === null)        status = 'Not Counted';
-    else if (item.count === 0)      status = 'Zero Stock';
-    else if (item.variance === null) status = 'No Par Set';
-    else if (item.variance < 0)     status = 'Below Par';
-    else if (item.variance === 0)   status = 'On Par';
-    else                            status = 'Above Par';
+    if (item.count === null)          status = 'Not Counted';
+    else if (item.count === 0)        status = 'Zero Stock';
+    else if (item.variance === null)  status = 'No On-Hand Set';
+    else if (item.variance < 0)       status = 'Below On Hand';
+    else if (item.variance === 0)     status = 'Matches';
+    else                              status = 'Above On Hand';
 
     rows.push([
       item.name,
       item.category || '',
       item.unit || '',
-      item.par_level !== null ? item.par_level : '',
+      item.on_hand  !== null && item.on_hand  !== undefined ? item.on_hand  : '',
+      item.par_level !== null && item.par_level !== undefined ? item.par_level : '',
       item.unit_cost !== null && item.unit_cost !== undefined ? item.unit_cost : '',
-      item.count     !== null ? item.count     : '',
-      item.variance  !== null ? item.variance  : '',
+      item.count    !== null ? item.count    : '',
+      item.variance !== null ? item.variance : '',
       status,
       item.variance_reason ? (reasonLabels[item.variance_reason] || item.variance_reason) : '',
     ]);
