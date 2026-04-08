@@ -434,6 +434,7 @@
     </div>
   </div>
   <div class="tab" id="nav-stocktake-tab" onclick="showPage('stocktake-page')" style="display:none;">Stocktake</div>
+  <div class="tab" id="nav-ordering-tab" onclick="showPage('ordering-page')" style="display:none;">Ordering</div>
   <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
@@ -2389,7 +2390,387 @@
 
 </div><!-- /stocktake-page -->
 
+<!-- ══════════════════ ORDERING ══════════════════ -->
+<div id="ordering-page" class="page">
+
+  <!-- KPI strip -->
+  <div class="kpi-grid" id="ord-kpi-strip"></div>
+
+  <!-- Sub-tab bar -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;border:1px solid var(--border);border-bottom:none;">
+    <button class="ord-tab active" id="ordtab-suggested"
+      onclick="showOrderingTab('suggested')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Suggested Orders
+    </button>
+    <button class="ord-tab" id="ordtab-orders"
+      onclick="showOrderingTab('orders')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Purchase Orders
+    </button>
+    <button class="ord-tab" id="ordtab-standing"
+      onclick="showOrderingTab('standing')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Standing Orders
+    </button>
+    <button class="ord-tab" id="ordtab-analytics"
+      onclick="showOrderingTab('analytics')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Analytics
+    </button>
+  </div>
+
+  <!-- ── SUGGESTED ORDERS TAB ── -->
+  <div id="ord-suggested">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">Suggested Orders</span>
+          <div class="text-sm" id="ord-suggested-source" style="margin-top:4px;">Based on most recent stocktake</div>
+        </div>
+        <div class="flex-gap">
+          <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="refreshSuggestedOrders()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="confirmAllSuggestedOrders()">Generate All POs</button>
+        </div>
+      </div>
+    </div>
+    <div id="ord-suggested-list">
+      <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No suggested orders — run a stocktake first or all items are at par.</div>
+    </div>
+  </div>
+
+  <!-- ── PURCHASE ORDERS TAB ── -->
+  <div id="ord-orders" style="display:none;">
+    <div class="card">
+      <div class="card-header flex-between">
+        <span class="card-title">Purchase Orders</span>
+        <div class="flex-gap">
+          <input type="text" id="ord-po-search" placeholder="Search…" style="width:180px;" oninput="renderPOList()">
+          <select id="ord-po-filter" onchange="renderPOList()" style="width:140px;">
+            <option value="">All Statuses</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="partial">Partial</option>
+            <option value="received">Received</option>
+            <option value="closed">Closed</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="openNewPOModal()">+ New PO</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div id="ord-po-list">
+          <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No purchase orders yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STANDING ORDERS TAB ── -->
+  <div id="ord-standing" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:24px;align-items:start;" class="responsive-2col">
+      <div class="card">
+        <div class="card-header flex-between">
+          <span class="card-title">Standing Orders</span>
+          <button class="btn btn-primary btn-sm" onclick="openStandingOrderModal()">+ New Standing Order</button>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div id="ord-standing-list">
+            <div style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">No standing orders yet.</div>
+          </div>
+        </div>
+      </div>
+      <!-- Info panel -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">How it works</span></div>
+        <div class="card-body" style="font-size:13px;color:var(--text2);line-height:1.7;">
+          <p style="margin-bottom:12px;">Standing orders let you set up recurring purchase templates per supplier — weekly, fortnightly, or monthly.</p>
+          <p style="margin-bottom:12px;">On the scheduled date, a <strong>draft PO</strong> is automatically generated and flagged for review. You can edit quantities before sending.</p>
+          <p>Standing orders are separate from suggested orders — they run on a fixed schedule regardless of stock levels.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ANALYTICS TAB ── -->
+  <div id="ord-analytics" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;" class="responsive-2col">
+
+      <!-- Spend by supplier -->
+      <div class="card">
+        <div class="card-header flex-between">
+          <span class="card-title">Spend by Supplier</span>
+          <select id="ord-analytics-range" onchange="renderAnalytics()" style="font-size:12px;padding:5px 10px;">
+            <option value="30">Last 30 days</option>
+            <option value="90" selected>Last 90 days</option>
+            <option value="180">Last 6 months</option>
+            <option value="365">Last 12 months</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+        <div class="card-body">
+          <div id="ord-spend-chart"></div>
+        </div>
+      </div>
+
+      <!-- Top items by spend -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Top Items by Spend</span></div>
+        <div class="card-body">
+          <div id="ord-top-items-chart"></div>
+        </div>
+      </div>
+
+      <!-- Price trends -->
+      <div class="card" style="grid-column:1/-1;">
+        <div class="card-header flex-between">
+          <span class="card-title">Price Trends</span>
+          <div style="font-size:12px;color:var(--text3);">Items where cost has changed across POs</div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div id="ord-price-trends"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /ordering-page -->
+
 </main><!-- /main -->
+
+<!-- ══════════ ORDERING MODALS ══════════ -->
+
+<!-- PO Detail / Edit modal -->
+<div class="modal-overlay" id="ord-po-modal">
+  <div class="modal" style="width:720px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <h3 id="ord-po-modal-title">New Purchase Order</h3>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-po-modal')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <input type="hidden" id="ord-po-edit-id">
+
+    <div class="form-grid" style="margin-bottom:20px;">
+      <div class="form-group">
+        <label>PO Number</label>
+        <input type="text" id="ord-po-number" placeholder="PO-001">
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="ord-po-date">
+      </div>
+      <div class="form-group">
+        <label>Supplier <span style="color:var(--danger);">*</span></label>
+        <select id="ord-po-supplier">
+          <option value="">Select supplier…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Expected Delivery</label>
+        <input type="date" id="ord-po-expected">
+      </div>
+      <div class="form-group full">
+        <label>Notes</label>
+        <input type="text" id="ord-po-notes" placeholder="Delivery instructions, reference numbers…">
+      </div>
+    </div>
+
+    <!-- Line items -->
+    <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;display:block;">Line Items</label>
+    <div style="display:grid;grid-template-columns:1fr 80px 100px 100px 90px 36px;gap:8px;padding:6px 2px;margin-bottom:4px;">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item / Description</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Qty</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Cost</span>
+      <span class="ord-col-total" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Subtotal</span>
+      <span class="ord-col-gst" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">GST</span>
+      <span></span>
+    </div>
+    <div id="ord-po-lines"></div>
+    <button class="btn btn-ghost btn-sm mt" onclick="addPOLine()" style="width:100%;border:1.5px dashed var(--border);">+ Add Line</button>
+
+    <!-- Summary -->
+    <div id="ord-po-summary" style="margin-top:16px;padding:14px 16px;background:var(--surface2);border-radius:10px;font-size:13px;"></div>
+
+    <div class="flex-gap mt" style="justify-content:flex-end;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-po-modal')">Cancel</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="savePOAs('draft')">Save Draft</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="generatePOPdf()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        PDF
+      </button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="emailPOToSupplier()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Email to Supplier
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="savePOAs('sent')">Send PO</button>
+    </div>
+  </div>
+</div>
+
+<!-- Goods Received modal -->
+<div class="modal-overlay" id="ord-receive-modal">
+  <div class="modal" style="width:680px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <h3 id="ord-receive-title">Receive Goods</h3>
+        <div id="ord-receive-subtitle" style="font-size:13px;color:var(--text3);margin-top:4px;"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-receive-modal')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px;gap:8px;padding:6px 14px;background:var(--surface2);border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;margin-bottom:0;">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Ordered</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Received</span>
+      <span class="ord-col-unit" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">PO Price</span>
+      <span class="ord-col-price" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Actual Price</span>
+    </div>
+    <div class="card" style="border-radius:0 0 var(--radius) var(--radius);">
+      <div id="ord-receive-lines" style="padding:0;"></div>
+    </div>
+
+    <div id="ord-receive-variance-note" style="display:none;margin-top:12px;padding:10px 14px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;font-size:12px;color:#856404;"></div>
+
+    <div style="margin-top:16px;padding:12px 16px;background:var(--surface2);border-radius:8px;font-size:13px;color:var(--text2);">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;font-size:13px;">
+        <input type="checkbox" id="ord-receive-create-bill" checked style="width:auto;padding:0;border:none;">
+        Automatically create a draft bill in Accounts Payable
+      </label>
+    </div>
+
+    <div id="ord-receive-error" style="display:none;margin-top:10px;padding:10px 14px;background:#fde2e2;color:var(--danger);border-radius:8px;font-size:13px;"></div>
+
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-receive-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmGoodsReceived()">Confirm Receipt</button>
+    </div>
+  </div>
+</div>
+
+<!-- Standing Order modal -->
+<div class="modal-overlay" id="ord-standing-modal">
+  <div class="modal" style="width:580px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <h3 id="ord-standing-modal-title">New Standing Order</h3>
+    <input type="hidden" id="ord-standing-edit-id">
+
+    <div class="form-grid" style="margin-bottom:20px;">
+      <div class="form-group full">
+        <label>Name <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="ord-standing-name" placeholder="e.g. Weekly Liquor Order">
+      </div>
+      <div class="form-group">
+        <label>Supplier <span style="color:var(--danger);">*</span></label>
+        <select id="ord-standing-supplier">
+          <option value="">Select supplier…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Schedule</label>
+        <select id="ord-standing-schedule">
+          <option value="weekly">Weekly</option>
+          <option value="fortnightly">Fortnightly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Next Due Date</label>
+        <input type="date" id="ord-standing-next-due">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;font-size:13px;color:var(--text);">
+          <input type="checkbox" id="ord-standing-active" checked style="width:auto;padding:0;border:none;">
+          Active
+        </label>
+      </div>
+    </div>
+
+    <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px;display:block;">Default Line Items</label>
+    <div style="display:grid;grid-template-columns:1fr 80px 100px 36px;gap:8px;padding:6px 2px;margin-bottom:4px;">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item / Description</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Qty</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Cost</span>
+      <span></span>
+    </div>
+    <div id="ord-standing-lines"></div>
+    <button class="btn btn-ghost btn-sm mt" onclick="addStandingLine()" style="width:100%;border:1.5px dashed var(--border);">+ Add Line</button>
+
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-standing-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveStandingOrder()">Save Standing Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- Return / Credit Note modal -->
+<div class="modal-overlay" id="ord-return-modal">
+  <div class="modal" style="width:520px;max-width:96vw;">
+    <h3>Log Return / Credit Note</h3>
+    <input type="hidden" id="ord-return-po-id">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div class="form-group">
+        <label>Item / Description <span style="color:var(--danger);">*</span></label>
+        <select id="ord-return-line">
+          <option value="">Select PO line…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Return Quantity <span style="color:var(--danger);">*</span></label>
+        <input type="number" id="ord-return-qty" min="0.01" step="0.01" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>Reason</label>
+        <select id="ord-return-reason">
+          <option value="damaged">Damaged on arrival</option>
+          <option value="wrong_item">Wrong item delivered</option>
+          <option value="short_dated">Short dated / near expiry</option>
+          <option value="over_supply">Over-supplied</option>
+          <option value="quality">Quality issue</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input type="text" id="ord-return-notes" placeholder="Optional detail">
+      </div>
+    </div>
+    <div id="ord-return-preview" style="margin-top:14px;padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:13px;display:none;"></div>
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-return-modal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmReturn()">Log Return &amp; Create Credit Note</button>
+    </div>
+  </div>
+</div>
+
+<!-- PO Detail view modal -->
+<div class="modal-overlay" id="ord-po-detail-modal">
+  <div class="modal" style="width:700px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div>
+        <h3 id="ord-detail-title">Purchase Order</h3>
+        <div id="ord-detail-subtitle" style="font-size:13px;color:var(--text3);margin-top:4px;"></div>
+      </div>
+      <div class="flex-gap" style="flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="generatePOPdf(_viewingPO?.id)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          PDF
+        </button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" id="ord-detail-receive-btn" onclick="openReceiveModal(_viewingPO?.id)">Receive Goods</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" id="ord-detail-return-btn" onclick="openReturnModal(_viewingPO?.id)">Log Return</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger);" id="ord-detail-void-btn" onclick="voidPO(_viewingPO?.id)">Void</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('ord-po-detail-modal')">Close</button>
+      </div>
+    </div>
+    <div class="kpi-grid" id="ord-detail-kpis" style="margin-bottom:20px;"></div>
+    <div id="ord-detail-lines"></div>
+    <div id="ord-detail-history" style="margin-top:20px;"></div>
+  </div>
+</div>
 
 <!-- ══════════ STOCKTAKE MODALS ══════════ -->
 
@@ -2474,6 +2855,22 @@
       <div class="form-group">
         <label>Notes</label>
         <input type="text" id="stk-supplier-notes" placeholder="e.g. Order by Wednesday for Friday delivery">
+      </div>
+      <div class="form-group">
+        <label>Lead Time (days)</label>
+        <input type="number" id="stk-supplier-lead-time" placeholder="e.g. 3" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label>Payment Terms</label>
+        <select id="stk-supplier-terms">
+          <option value="">— Not set —</option>
+          <option value="COD">COD — Cash on Delivery</option>
+          <option value="Net 7">Net 7</option>
+          <option value="Net 14">Net 14</option>
+          <option value="Net 30">Net 30</option>
+          <option value="Net 60">Net 60</option>
+          <option value="EOM">EOM — End of Month</option>
+        </select>
       </div>
     </div>
     <div class="flex-gap mt" style="justify-content:flex-end;">
@@ -2736,6 +3133,7 @@
 <script src="members.js"></script>
 <script src="import.js"></script>
 <script src="stocktake.js"></script>
+<script src="ordering.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
