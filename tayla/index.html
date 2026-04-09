@@ -401,6 +401,37 @@
     👁 Accountant view — read only
   </div>
   <div class="header-actions">
+    <!-- Franchise notifications bell — owner only, hidden until franchises exist -->
+    <div id="notif-bell-wrap" style="display:none;position:relative;">
+      <button onclick="toggleNotifPanel()" style="
+        position:relative;background:none;border:none;cursor:pointer;
+        padding:6px 8px;border-radius:8px;color:#fff;font-size:18px;
+        display:flex;align-items:center;
+      " title="Franchise notifications">
+        🔔
+        <span id="notif-badge" style="
+          display:none;position:absolute;top:2px;right:2px;
+          background:#e53e3e;color:#fff;border-radius:99px;
+          font-size:10px;font-weight:700;font-family:'DM Sans',sans-serif;
+          min-width:16px;height:16px;line-height:16px;text-align:center;
+          padding:0 3px;
+        ">0</span>
+      </button>
+      <div id="notif-panel" style="
+        display:none;position:absolute;top:calc(100% + 8px);right:0;
+        background:#2d2d3a;border:1px solid #444455;border-radius:12px;
+        box-shadow:0 8px 32px rgba(0,0,0,.4);width:340px;z-index:9999;overflow:hidden;
+      ">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #444455;">
+          <div style="font-size:13px;font-weight:600;color:#e8e8f0;">Branch Notifications</div>
+          <button onclick="markAllNotifSeen()" style="font-size:11px;color:#9f9fba;background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;">Mark all read</button>
+        </div>
+        <div id="notif-list" style="max-height:360px;overflow-y:auto;"></div>
+        <div style="padding:10px 16px;border-top:1px solid #444455;text-align:center;">
+          <span onclick="showPage('franchise-overview-page');showFranchiseTab('notifications');toggleNotifPanel()" style="font-size:12px;color:#63b3ed;cursor:pointer;">View all in Franchises →</span>
+        </div>
+      </div>
+    </div>
     <button class="btn btn-ghost" onclick="exportExcel()">⬇ Export Excel</button>
     <button class="btn btn-accent" onclick="exportPDF()">⬇ Export PDF</button>
     <div style="position:relative;" id="user-menu-wrap">
@@ -2457,6 +2488,10 @@
       style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
       Per-Branch P&amp;L
     </button>
+    <button class="stk-tab" id="fotab-notifications" onclick="showFranchiseTab('notifications')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Notifications <span id="fo-notif-badge" style="display:none;background:#e53e3e;color:#fff;border-radius:99px;font-size:10px;padding:1px 6px;margin-left:4px;font-weight:700;"></span>
+    </button>
   </div>
 
   <!-- ── OVERVIEW TAB ── -->
@@ -2507,6 +2542,27 @@
       </div>
       <div class="card-body">
         <div id="fo-branch-body"><div style="color:var(--text3);font-size:13px;">Select a branch above to view their P&L.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NOTIFICATIONS TAB ── -->
+  <div id="fo-notifications" style="display:none;">
+    <div class="card section-gap">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">Branch Activity</span>
+          <div class="text-sm">Finalisation events and updates from all franchise branches</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <select id="fo-notif-filter" onchange="renderFranchiseNotifications()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);">
+            <option value="">All branches</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="markAllNotifSeen()">Mark all read</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div id="fo-notif-list"></div>
       </div>
     </div>
   </div>
