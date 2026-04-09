@@ -65,11 +65,12 @@ async function afterLogin() {
     // Invited member — has access to someone else's business, skip setup
     const biz = _allBusinesses[0];
     _businessProfile = biz;
-    _userRole = biz._role || 'accountant';
-    _isReadOnly = _userRole === 'accountant';
+    _userRole        = biz._role || 'accountant';
+    _permissionSet   = biz._permissionSet || 'full_access';
+    _isReadOnly      = _userRole === 'accountant' || _permissionSet === 'read_only';
     applyProfileToApp(biz);
     hideAllOverlays();
-    if (typeof applyReadOnlyMode === 'function') applyReadOnlyMode();
+    if (typeof applyPermissionSet === 'function') applyPermissionSet();
     toast(`👋 Welcome! You have ${_userRole} access to ${biz.biz_name || 'this business'}`);
   } else {
     // New user with no business and no invites — show setup wizard
@@ -776,9 +777,9 @@ function showPage(id) {
   }
   if (id === 'settings-page') {
     renderSoftwareSettings();
-    // Populate Business ID display for Workforce linking
     const bizIdEl = document.getElementById('settings-business-id-display');
     if (bizIdEl && _businessId) bizIdEl.value = _businessId;
+    if (typeof loadFranchises === 'function') loadFranchises();
   }
   renderAll();
 }
@@ -3829,6 +3830,24 @@ async function dbLoadSalesSummary(fromDate, toDate) {
     .order('date');
   if (error) { console.error('Load sales_summary failed:', error); return []; }
   return data || [];
+}
+
+// ══════════════════════════════════════════════════════
+//  MANAGER INVITE HELPERS
+// ══════════════════════════════════════════════════════
+
+function togglePermissionSetRow() {
+  const role = document.getElementById('invite-role')?.value;
+  const row  = document.getElementById('permission-set-row');
+  if (row) row.style.display = role === 'manager' ? 'block' : 'none';
+}
+
+function submitInviteMember() {
+  // Sync selected radio to hidden input before calling inviteMember
+  const selected = document.querySelector('input[name="perm-set"]:checked');
+  const hiddenEl = document.getElementById('invite-permission-set');
+  if (hiddenEl && selected) hiddenEl.value = selected.value;
+  if (typeof inviteMember === 'function') inviteMember();
 }
 
 function fmt(n) {
