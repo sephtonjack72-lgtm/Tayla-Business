@@ -992,6 +992,19 @@ async function confirmGoodsReceived() {
   renderPOList();
   renderOrdKpis();
   toast(`Goods received ✓${createBill ? ' · Draft bill created' : ''} · On-hand updated`);
+
+  // Notify parent if this is a franchise branch
+  if (_businessProfile?.parent_business_id && typeof postFranchiseEvent === 'function') {
+    const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === po.supplier_id);
+    postFranchiseEvent('po_received', {
+      summary: `PO ${po.po_number} received from ${supplier?.name || 'supplier'} · ${receiptLines.length} line${receiptLines.length !== 1 ? 's' : ''}`,
+      details: `Total: $${receiptTotal.toFixed(2)}${createBill ? ' · Draft bill created' : ''}`,
+      po_number:     po.po_number,
+      supplier_name: supplier?.name || '',
+      total:         +receiptTotal.toFixed(2),
+      lines:         receiptLines.length,
+    });
+  }
 }
 
 async function createBillFromDelivery(po, receipt) {
