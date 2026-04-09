@@ -581,6 +581,53 @@
       </div>
     </div>
   </div>
+
+  <!-- Workforce Sales Summary — only shown when Workforce is linked -->
+  <div id="dash-sales-summary" style="display:none;" class="section-gap">
+    <div class="card">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">Sales from Workforce</span>
+          <div class="text-sm" id="dash-sales-sync-label" style="margin-top:4px;"></div>
+        </div>
+        <div class="flex-gap">
+          <select id="dash-sales-range" onchange="renderDashSalesSummary()" style="font-size:12px;padding:5px 10px;">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body">
+        <!-- KPI row -->
+        <div class="kpi-grid" id="dash-sales-kpis" style="margin-bottom:20px;"></div>
+        <!-- Daily bar chart -->
+        <div id="dash-sales-chart"></div>
+        <!-- Breakdown table -->
+        <div id="dash-sales-breakdown" style="margin-top:16px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPT Review alert — only shown when items need updating -->
+  <div id="dash-upt-alert" style="display:none;" class="section-gap">
+    <div class="card" style="border-left:4px solid var(--accent2);">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">UPT Updates Available</span>
+          <div class="text-sm" id="dash-upt-alert-subtitle" style="margin-top:4px;"></div>
+        </div>
+        <button class="btn btn-accent btn-sm" onclick="showPage('stocktake-page');showStocktakeTab('upt')">
+          Review UPT
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+      <div class="card-body" style="padding:0;">
+        <div id="dash-upt-alert-rows"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- ══════════════════ TRANSACTIONS ══════════════════ -->
@@ -2321,6 +2368,11 @@
       style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
       History
     </button>
+    <button class="stk-tab" id="stktab-upt"
+      onclick="showStocktakeTab('upt')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      UPT Review
+    </button>
   </div>
 
   <!-- ── CATALOGUE TAB ── -->
@@ -2465,6 +2517,65 @@
       </div>
     </div>
   </div><!-- /stk-history -->
+
+  <!-- ── UPT REVIEW TAB ── -->
+  <div id="stk-upt" style="display:none;">
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">UPT Review</span>
+          <div class="text-sm" id="stk-upt-tab-source" style="margin-top:4px;">Units per $1,000 in sales — calculated from Workforce sales data</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="renderUptReviewTab()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Pending updates banner — shown when items need updating -->
+    <div id="stk-upt-pending-banner" style="display:none;margin-bottom:16px;padding:14px 20px;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#856404" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="stk-upt-pending-text" style="font-size:13px;font-weight:500;color:#856404;"></span>
+      </div>
+      <div class="flex-gap">
+        <button class="btn btn-ghost btn-sm" style="color:#856404;border:1px solid #ffc107;" onclick="uptUpdateAll()">Update All</button>
+      </div>
+    </div>
+
+    <!-- No Workforce data state -->
+    <div id="stk-upt-no-data" style="display:none;">
+      <div class="card">
+        <div class="card-body" style="padding:32px;text-align:center;color:var(--text3);font-size:13px;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 12px;display:block;color:var(--border);"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
+          No Workforce sales data found. Link your Workforce account in Settings and enter actual daily sales to enable UPT calculation.
+        </div>
+      </div>
+    </div>
+
+    <!-- UPT items table -->
+    <div id="stk-upt-tab-content" style="display:none;">
+      <div class="card">
+        <div class="card-body" style="padding:0;">
+          <!-- Column headers -->
+          <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px 100px;gap:10px;padding:8px 20px;background:var(--surface2);border-bottom:1px solid var(--border);">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Item</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Current UPT</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Calculated</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Change</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);">Period</span>
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);text-align:right;">Action</span>
+          </div>
+          <div id="stk-upt-tab-rows"></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:12px 16px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.6;">
+        UPT = units consumed ÷ (total sales revenue ÷ 1,000) for the period between your last two stocktakes.
+        Items with less than 5% change are not shown — their current UPT is still accurate.
+      </div>
+    </div>
+  </div><!-- /stk-upt -->
 
 </div><!-- /stocktake-page -->
 
