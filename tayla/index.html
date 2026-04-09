@@ -129,6 +129,14 @@
     box-shadow:0 20px 60px rgba(0,0,0,.35);
   ">
     <!-- Wizard header -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:-16px;">
+      <button id="setup-cancel-btn" onclick="cancelSetupWizard()" style="
+        display:none;background:none;border:none;font-size:12px;color:var(--text3);
+        cursor:pointer;font-family:'DM Sans',sans-serif;padding:4px 8px;border-radius:6px;
+      " onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text3)'">
+        ← Back to app
+      </button>
+    </div>
     <div style="text-align:center;margin-bottom:32px;">
       <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--accent);margin-bottom:4px;">
         Tayla <span style="color:var(--accent2);">Business</span>
@@ -375,12 +383,12 @@
       </button>
       <div id="biz-switcher-menu" style="
         display:none;position:absolute;top:calc(100% + 8px);left:0;
-        background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        box-shadow:0 8px 24px rgba(26,26,46,0.15);min-width:220px;z-index:9999;overflow:hidden;
+        background:#2d2d3a;border:1px solid #444455;border-radius:10px;
+        box-shadow:0 8px 32px rgba(0,0,0,.4);min-width:240px;z-index:9999;overflow:hidden;
       ">
-        <div style="padding:10px 16px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);border-bottom:1px solid var(--border);">Your Businesses</div>
+        <div style="padding:10px 16px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#9f9fba;border-bottom:1px solid #444455;">Your Businesses</div>
         <div id="biz-switcher-list"></div>
-        <div onclick="addNewBusiness()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--accent3);border-top:1px solid var(--border);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">+ Add Business</div>
+        <div onclick="addNewBusiness()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:#63b3ed;border-top:1px solid #444455;" onmouseover="this.style.background='#3a3a4a'" onmouseout="this.style.background=''">+ Add Business</div>
       </div>
     </div>
   </div>
@@ -1351,15 +1359,15 @@
         <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">
           Get the connector code from Tayla Workforce → Account Settings → Team → Franchises. Each franchise has its own unique code.
         </div>
-        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-          <div class="form-group" style="flex:1;min-width:200px;margin:0;">
-            <label>Connector Code</label>
-            <input type="text" id="franchise-connector-code"
-              placeholder="e.g. TF-A3K9B2"
-              style="font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.5px;">
-          </div>
-          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;border:1.5px solid var(--border);color:var(--text);" onclick="testFranchiseCode()">Test Code</button>
-          <button class="btn btn-primary btn-sm" style="flex-shrink:0;" onclick="linkFranchise()">Link Franchise</button>
+        <div class="form-group">
+          <label>Connector Code</label>
+          <input type="text" id="franchise-connector-code"
+            placeholder="e.g. TF-A3K9B2"
+            style="font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.5px;max-width:320px;">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="btn btn-ghost btn-sm" style="color:var(--text);background:var(--surface2);border:1.5px solid var(--border);" onclick="testFranchiseCode()">Test Code</button>
+          <button class="btn btn-primary btn-sm" onclick="linkFranchise()">Link Franchise</button>
         </div>
         <div id="franchise-link-status" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
       </div>
