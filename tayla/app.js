@@ -774,7 +774,12 @@ function showPage(id) {
     }
     showOrderingTab('suggested');
   }
-  if (id === 'settings-page') renderSoftwareSettings();
+  if (id === 'settings-page') {
+    renderSoftwareSettings();
+    // Populate Business ID display for Workforce linking
+    const bizIdEl = document.getElementById('settings-business-id-display');
+    if (bizIdEl && _businessId) bizIdEl.value = _businessId;
+  }
   renderAll();
 }
 
@@ -3776,6 +3781,48 @@ function getSoftwareIncomeLines(fyStart, fyEnd) {
     });
   });
   return lines;
+}
+
+// ══════════════════════════════════════════════════════
+//  TAYLA WORKFORCE LINK — BUSINESS SIDE
+// ══════════════════════════════════════════════════════
+
+function copyBusinessId() {
+  const id  = _businessId;
+  const el  = document.getElementById('settings-business-id-display');
+  const msg = document.getElementById('settings-biz-id-status');
+  if (!id) { toast('Business ID not available — please log in again'); return; }
+  navigator.clipboard.writeText(id).then(() => {
+    if (el)  el.style.borderColor = 'var(--success)';
+    if (msg) {
+      msg.style.background = '#d4edda';
+      msg.style.color      = 'var(--success)';
+      msg.textContent      = '✓ Business ID copied — paste it into Tayla Workforce → Business Settings → Tayla Business Link';
+      msg.style.display    = 'block';
+    }
+    setTimeout(() => {
+      if (el)  el.style.borderColor = '';
+      if (msg) msg.style.display    = 'none';
+    }, 4000);
+  }).catch(() => {
+    // Fallback for browsers without clipboard API
+    if (el) { el.select(); document.execCommand('copy'); }
+    toast('Business ID copied ✓');
+  });
+}
+
+// Load sales_summary rows for a date range — used by stocktake UPT calculation
+async function dbLoadSalesSummary(fromDate, toDate) {
+  if (!_businessId) return [];
+  const { data, error } = await _supabase
+    .from('sales_summary')
+    .select('*')
+    .eq('business_id', _businessId)
+    .gte('date', fromDate)
+    .lte('date', toDate)
+    .order('date');
+  if (error) { console.error('Load sales_summary failed:', error); return []; }
+  return data || [];
 }
 
 function fmt(n) {
