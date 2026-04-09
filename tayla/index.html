@@ -447,7 +447,8 @@
   </div>
   <div class="tab" id="nav-stocktake-tab" onclick="showPage('stocktake-page')" style="display:none;">Stocktake</div>
   <div class="tab" id="nav-ordering-tab" onclick="showPage('ordering-page')" style="display:none;">Ordering</div>
-  <div class="tab" onclick="showPage('settings-page')">⚙ Settings</div>
+  <div class="tab" id="nav-franchises-tab" onclick="showPage('franchise-overview-page')" style="display:none;">🏢 Franchises</div>
+  <div class="tab" id="tab-settings" onclick="showPage('settings-page')">⚙ Settings</div>
 </nav>
 
 <main>
@@ -593,6 +594,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Group Performance — only shown when franchise branches are linked -->
+  <div id="dash-group-kpis" style="display:none;" class="section-gap"></div>
 
   <!-- Workforce Sales Summary — only shown when Workforce is linked -->
   <div id="dash-sales-summary" style="display:none;" class="section-gap">
@@ -2432,6 +2436,82 @@
   </div>
 
 </div><!-- /receipts-page -->
+
+<!-- ══════════════════ FRANCHISE OVERVIEW ══════════════════ -->
+<div id="franchise-overview-page" class="page">
+
+  <!-- KPI strip -->
+  <div class="kpi-grid" id="fo-kpi-strip" style="margin-bottom:24px;"></div>
+
+  <!-- Sub-tab bar -->
+  <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;border:1px solid var(--border);border-bottom:none;">
+    <button class="stk-tab active" id="fotab-overview" onclick="showFranchiseTab('overview')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Overview
+    </button>
+    <button class="stk-tab" id="fotab-combined" onclick="showFranchiseTab('combined')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Combined P&amp;L
+    </button>
+    <button class="stk-tab" id="fotab-branch" onclick="showFranchiseTab('branch')"
+      style="padding:13px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">
+      Per-Branch P&amp;L
+    </button>
+  </div>
+
+  <!-- ── OVERVIEW TAB ── -->
+  <div id="fo-overview">
+    <div id="fo-overview-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;"></div>
+  </div>
+
+  <!-- ── COMBINED P&L TAB ── -->
+  <div id="fo-combined" style="display:none;">
+    <div class="card section-gap">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">Combined Group P&amp;L</span>
+          <div class="text-sm" id="fo-combined-subtitle">All entities consolidated</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="fo-fy-select" onchange="renderFranchiseCombinedPnL()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);">
+            <option value="2026">FY2026</option>
+            <option value="2025">FY2025</option>
+            <option value="2027">FY2027</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="fo-combined-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PER-BRANCH TAB ── -->
+  <div id="fo-branch" style="display:none;">
+    <div class="card section-gap">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">Branch P&amp;L</span>
+          <div class="text-sm">View the income statement for a specific branch</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="fo-branch-select" onchange="renderFranchiseBranchPnL()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);">
+            <option value="">Select branch…</option>
+          </select>
+          <select id="fo-branch-fy" onchange="renderFranchiseBranchPnL()" style="font-size:12px;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);">
+            <option value="2026">FY2026</option>
+            <option value="2025">FY2025</option>
+            <option value="2027">FY2027</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="fo-branch-body"><div style="color:var(--text3);font-size:13px;">Select a branch above to view their P&L.</div></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /franchise-overview-page -->
 
 <!-- ══════════════════ STOCKTAKE ══════════════════ -->
 <div id="stocktake-page" class="page">
