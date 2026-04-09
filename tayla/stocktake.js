@@ -240,21 +240,21 @@ function renderCatalogue() {
     ${items.map(item => {
       const supplier = suppliers.find(s => s.id === item.supplier_id);
       return `
-        <div class="stk-item-card ${item.archived ? 'archived' : ''}">
-          <div style="flex:1;min-width:0;">
+        <div style="display:grid;grid-template-columns:1fr 90px 80px 80px 110px 100px 80px;gap:10px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--border);transition:background .1s;${item.archived ? 'opacity:.45;' : ''}" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <div style="min-width:0;">
             <div style="font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.name}</div>
             ${item.barcode ? `<div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${item.barcode}</div>` : ''}
           </div>
-          <div style="width:90px;font-size:12px;color:var(--text2);">${item.unit || 'units'}</div>
-          <div style="width:80px;font-size:12px;font-family:'DM Mono',monospace;font-weight:600;color:${
+          <div style="font-size:12px;color:var(--text2);">${item.unit || 'units'}</div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;font-weight:600;color:${
             item.on_hand != null && item.par_level != null
               ? (item.on_hand <= item.par_level ? 'var(--danger)' : 'var(--success)')
               : 'var(--text2)'
           };">${item.on_hand ?? '—'}</div>
-          <div style="width:80px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</div>
-          <div style="width:100px;font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.unit_cost != null ? '$' + item.unit_cost.toFixed(2) : '—'}</div>
-          <div style="width:100px;font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${supplier?.name || '—'}</div>
-          <div style="display:flex;gap:6px;flex-shrink:0;">
+          <div style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.par_level ?? '—'}</div>
+          <div style="font-size:12px;color:var(--text2);font-family:'DM Mono',monospace;">${item.unit_cost != null ? '$' + item.unit_cost.toFixed(2) : '—'}</div>
+          <div style="font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${supplier?.name || '—'}</div>
+          <div style="display:flex;gap:6px;justify-content:flex-end;flex-shrink:0;">
             ${item.archived
               ? `<button class="btn btn-ghost btn-sm" style="color:var(--success);font-size:11px;" onclick="unarchiveItem('${item.id}')">Restore</button>`
               : `<button class="btn btn-ghost btn-sm" style="color:var(--text);font-size:11px;" onclick="openItemModal('${item.id}')">Edit</button>
