@@ -570,24 +570,19 @@ async function linkFranchise() {
     return;
   }
 
-  // Create a child businesses row in Business Supabase
-  const { data: newBiz, error } = await _supabase
-    .from('businesses')
-    .insert({
-      user_id:            _currentUser.id,
-      biz_name:           wfBizName,
-      abn:                wfAbn || null,
-      parent_business_id: _businessId,
-      connector_code:     code,
-      is_franchise:       true,
-      biz_type:           _businessProfile?.biz_type || 'hospitality',
-      created_at:         new Date().toISOString(),
-      updated_at:         new Date().toISOString(),
-    })
-    .select()
-    .single();
+  // Create a child businesses row via RPC (bypasses RLS INSERT restriction)
+  const { data: rpcResult, error } = await _supabase.rpc('create_franchise_business', {
+    p_user_id:            _currentUser.id,
+    p_biz_name:           wfBizName,
+    p_abn:                wfAbn || null,
+    p_parent_business_id: _businessId,
+    p_connector_code:     code,
+    p_biz_type:           _businessProfile?.biz_type || 'hospitality',
+  });
 
-  if (error) { toast('Failed to link: ' + error.message); return; }
+  if (error) { toast('Link failed: ' + (error.message || error.code)); console.error('linkFranchise error:', error); return; }
+
+  const newBiz = typeof rpcResult === 'string' ? JSON.parse(rpcResult) : rpcResult;
 
   // Mirror the linked_business_id back to Workforce so sales can mirror
   const wf = getWfSupabase();
