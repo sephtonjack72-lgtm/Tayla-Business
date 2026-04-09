@@ -147,6 +147,18 @@ function applyProfileToApp(profile) {
       _appReady = true;
       // Re-render software settings after data is available
       setTimeout(() => renderSoftwareSettings(), 500);
+      // Check for franchise branches and show nav tab + group KPIs
+      if (_userRole === 'owner') {
+        _supabase.from('businesses').select('id,biz_name')
+          .eq('parent_business_id', _businessId)
+          .eq('is_franchise', true)
+          .then(({ data }) => {
+            window._franchiseList = data || [];
+            const navTab = document.getElementById('nav-franchises-tab');
+            if (navTab) navTab.style.display = _franchiseList.length > 0 ? '' : 'none';
+            if (_franchiseList.length > 0) renderDashboardGroupKPIs();
+          });
+      }
     });
   });
 }
@@ -790,6 +802,9 @@ function showPage(id) {
       return;
     }
     showOrderingTab('suggested');
+  }
+  if (id === 'franchise-overview-page') {
+    if (typeof initFranchiseOverviewPage === 'function') initFranchiseOverviewPage();
   }
   if (id === 'settings-page') {
     renderSoftwareSettings();
@@ -3565,6 +3580,9 @@ function updateStocktakeNavVisibility(bizType) {
   // Users report — SaaS only
   const usersItem = document.getElementById('reports-users-item');
   if (usersItem) usersItem.style.display = bizType === 'saas' ? '' : 'none';
+  // Franchises tab — owners only, only if franchises exist
+  const frTab = document.getElementById('nav-franchises-tab');
+  if (frTab && _userRole !== 'owner') frTab.style.display = 'none';
 }
 
 function toggleUserMenu() {
@@ -3879,6 +3897,337 @@ function cancelSetupWizard() {
   // Hide cancel button again
   const cancelBtn = document.getElementById('setup-cancel-btn');
   if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════
+//  FRANCHISE OVERVIEW — P&L across all branches
+// ══════════════════════════════════════════════════════
+
+// Cache for franchise P&L data — keyed by businessId_fy
+const _franchisePnLCache = {};
+
+// Load transactions + journals for a given businessId and return P&L totals
+async function loadFranchisePnL(businessId, fyVal) {
+  const cacheKey = `${businessId}_${fyVal}`;
+  if (_franchisePnLCache[cacheKey]) return _franchisePnLCache[cacheKey];
+
+  const fy      = parseInt(fyVal);
+  const fyStart = `${fy - 1}-07-01`;
+  const fyEnd   = `${fy}-06-30`;
+
+  // Load transactions for this business in the FY range
+  const [txRes, jnlRes] = await Promise.all([
+    _supabase.from('transactions')
+      .select('type, amount, date, debits, credits, category')
+      .eq('business_id', businessId)
+      .gte('date', fyStart).lte('date', fyEnd),
+    _supabase.from('journals')
+      .select('date, lines')
+      .eq('business_id', businessId)
+      .gte('date', fyStart).lte('date', fyEnd),
+  ]);
+
+  const txns = txRes.data || [];
+  const jnls = jnlRes.data || [];
+
+  // Calculate revenue and expenses using same logic as totals()
+  let revenue  = 0;
+  let expenses = 0;
+
+  // Revenue accounts = 4xxx (credit-normal), expense = 5xxx (debit-normal)
+  const revPrefixes = ['4'];
+  const expPrefixes = ['5'];
+
+  txns.forEach(t => {
+    if (t.type === 'journal' && t.debits && t.credits) {
+      const debits  = typeof t.debits  === 'string' ? JSON.parse(t.debits)  : (t.debits  || []);
+      const credits = typeof t.credits === 'string' ? JSON.parse(t.credits) : (t.credits || []);
+      credits.forEach(c => { if (revPrefixes.some(p => String(c.account).startsWith(p))) revenue  += c.amount; });
+      debits.forEach(d  => { if (expPrefixes.some(p => String(d.account).startsWith(p))) expenses += d.amount; });
+    } else if (t.type === 'income')  { revenue  += t.amount; }
+      else if (t.type === 'expense') { expenses += t.amount; }
+  });
+
+  jnls.forEach(j => {
+    const lines = typeof j.lines === 'string' ? JSON.parse(j.lines) : (j.lines || []);
+    lines.forEach(l => {
+      const acc = String(l.accountId || l.account || '');
+      if (revPrefixes.some(p => acc.startsWith(p)) && l.credit > 0) revenue  += l.credit;
+      if (expPrefixes.some(p => acc.startsWith(p)) && l.debit  > 0) expenses += l.debit;
+    });
+  });
+
+  const result = { revenue, expenses, netProfit: revenue - expenses, businessId, fyVal };
+  _franchisePnLCache[cacheKey] = result;
+  return result;
+}
+
+// Show/hide franchise tabs
+function showFranchiseTab(tab) {
+  ['overview', 'combined', 'branch'].forEach(t => {
+    const panel = document.getElementById(`fo-${t}`);
+    if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    const btn = document.getElementById(`fotab-${t}`);
+    if (btn) {
+      btn.classList.toggle('active', t === tab);
+      btn.style.color = t === tab ? 'var(--accent)' : 'var(--text2)';
+      btn.style.borderBottomColor = t === tab ? 'var(--accent2)' : 'transparent';
+    }
+  });
+  if (tab === 'overview')  renderFranchiseOverview();
+  if (tab === 'combined')  renderFranchiseCombinedPnL();
+  if (tab === 'branch')    populateBranchSelect();
+}
+
+// Entry point — called when Franchises page is shown
+async function initFranchiseOverviewPage() {
+  // Only visible for owners
+  if (_userRole !== 'owner') return;
+
+  // Load franchise list from DB
+  const { data: franchises } = await _supabase
+    .from('businesses')
+    .select('id, biz_name, connector_code, is_franchise')
+    .eq('parent_business_id', _businessId)
+    .eq('is_franchise', true)
+    .order('biz_name');
+
+  window._franchiseList = franchises || [];
+
+  // Show/hide the nav tab based on whether franchises exist
+  const navTab = document.getElementById('nav-franchises-tab');
+  if (navTab) navTab.style.display = _franchiseList.length > 0 ? '' : 'none';
+
+  // Render group KPIs
+  await renderFranchiseGroupKPIs();
+
+  // Default to overview tab
+  showFranchiseTab('overview');
+}
+
+// Group KPI strip — total across parent + all franchises
+async function renderFranchiseGroupKPIs() {
+  const el = document.getElementById('fo-kpi-strip');
+  if (!el) return;
+
+  const fyVal = '2026';
+  const allBizIds = [_businessId, ...(_franchiseList || []).map(f => f.id)];
+
+  el.innerHTML = `<div class="kpi"><div class="kpi-label">Loading group data…</div></div>`;
+
+  const results = await Promise.all(allBizIds.map(id => loadFranchisePnL(id, fyVal)));
+
+  const groupRevenue   = results.reduce((s, r) => s + r.revenue,   0);
+  const groupExpenses  = results.reduce((s, r) => s + r.expenses,  0);
+  const groupNetProfit = results.reduce((s, r) => s + r.netProfit, 0);
+  const branchCount    = (_franchiseList || []).length;
+
+  el.innerHTML = `
+    <div class="kpi"><div class="kpi-label">Group Revenue</div><div class="kpi-value positive">${fmt(groupRevenue)}</div><div class="kpi-sub">FY${fyVal} · ${allBizIds.length} entit${allBizIds.length !== 1 ? 'ies' : 'y'}</div></div>
+    <div class="kpi"><div class="kpi-label">Group Expenses</div><div class="kpi-value">${fmt(groupExpenses)}</div><div class="kpi-sub">All entities combined</div></div>
+    <div class="kpi"><div class="kpi-label">Group Net Profit</div><div class="kpi-value ${groupNetProfit >= 0 ? 'positive' : 'negative'}">${fmt(groupNetProfit)}</div><div class="kpi-sub">${groupNetProfit >= 0 ? 'Profitable group' : 'Net loss position'}</div></div>
+    <div class="kpi"><div class="kpi-label">Franchise Branches</div><div class="kpi-value">${branchCount}</div><div class="kpi-sub">Active branches</div></div>
+  `;
+}
+
+// Overview tab — card per branch + parent
+async function renderFranchiseOverview() {
+  const el = document.getElementById('fo-overview-cards');
+  if (!el) return;
+
+  const fyVal = '2026';
+  const allEntities = [
+    { id: _businessId, biz_name: _businessProfile?.biz_name || 'Head Office', isParent: true },
+    ...(_franchiseList || []).map(f => ({ ...f, isParent: false })),
+  ];
+
+  el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:8px 0;">Loading branch data…</div>`;
+
+  const results = await Promise.all(allEntities.map(e => loadFranchisePnL(e.id, fyVal)));
+
+  el.innerHTML = allEntities.map((entity, i) => {
+    const r = results[i];
+    const margin = r.revenue > 0 ? ((r.netProfit / r.revenue) * 100).toFixed(1) : null;
+    return `
+      <div class="card" style="${entity.isParent ? 'border-left:4px solid var(--accent2);' : ''}">
+        <div class="card-header flex-between">
+          <div>
+            <div class="card-title" style="font-size:15px;">${entity.biz_name}</div>
+            <div class="text-sm">${entity.isParent ? 'Parent entity' : '📍 Franchise branch'} · FY${fyVal}</div>
+          </div>
+          ${!entity.isParent ? `<button class="btn btn-ghost btn-sm" onclick="switchBusiness('${entity.id}')">View Branch</button>` : ''}
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+            <div style="text-align:center;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Revenue</div>
+              <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--success);">${fmt(r.revenue)}</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Expenses</div>
+              <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;">${fmt(r.expenses)}</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:4px;">Net Profit</div>
+              <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:${r.netProfit >= 0 ? 'var(--success)' : 'var(--danger)'};">${fmt(r.netProfit)}</div>
+            </div>
+          </div>
+          ${margin !== null ? `
+            <div style="margin-top:12px;padding:8px 12px;background:var(--surface2);border-radius:8px;display:flex;justify-content:space-between;font-size:12px;">
+              <span style="color:var(--text3);">Net Margin</span>
+              <span style="font-weight:600;color:${parseFloat(margin) >= 0 ? 'var(--success)' : 'var(--danger)'};">${margin}%</span>
+            </div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Combined P&L tab — consolidated income statement
+async function renderFranchiseCombinedPnL() {
+  const el = document.getElementById('fo-combined-body');
+  const subtitle = document.getElementById('fo-combined-subtitle');
+  if (!el) return;
+
+  const fyVal = document.getElementById('fo-fy-select')?.value || '2026';
+  const allEntities = [
+    { id: _businessId, biz_name: _businessProfile?.biz_name || 'Head Office' },
+    ...(_franchiseList || []),
+  ];
+
+  el.innerHTML = `<div style="color:var(--text3);font-size:13px;">Consolidating data…</div>`;
+  if (subtitle) subtitle.textContent = `${allEntities.length} entit${allEntities.length !== 1 ? 'ies' : 'y'} · FY${fyVal}`;
+
+  const results = await Promise.all(allEntities.map(e => loadFranchisePnL(e.id, fyVal)));
+
+  const totalRevenue   = results.reduce((s, r) => s + r.revenue,   0);
+  const totalExpenses  = results.reduce((s, r) => s + r.expenses,  0);
+  const totalNetProfit = totalRevenue - totalExpenses;
+
+  el.innerHTML = `
+    <div style="margin-bottom:20px;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;">Group — All Entities</div>
+      <div style="font-size:13px;color:var(--text2);">Consolidated Income Statement — Year ending 30 June ${fyVal}</div>
+      <div style="font-size:12px;color:var(--text3);">${allEntities.length} entit${allEntities.length !== 1 ? 'ies' : 'y'} combined · Figures in AUD</div>
+    </div>
+
+    <!-- Per-entity breakdown -->
+    <div style="margin-bottom:24px;">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;">By Entity</div>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+        <div style="display:grid;grid-template-columns:1fr 110px 110px 110px;gap:8px;padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);">
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Entity</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);text-align:right;">Revenue</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);text-align:right;">Expenses</span>
+          <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);text-align:right;">Net Profit</span>
+        </div>
+        ${allEntities.map((e, i) => {
+          const r = results[i];
+          return `
+            <div style="display:grid;grid-template-columns:1fr 110px 110px 110px;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);">
+              <div style="font-size:13px;font-weight:500;">${e.biz_name}</div>
+              <div style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;color:var(--success);">${fmt(r.revenue)}</div>
+              <div style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;">${fmt(r.expenses)}</div>
+              <div style="font-size:13px;font-family:'DM Mono',monospace;text-align:right;font-weight:600;color:${r.netProfit >= 0 ? 'var(--success)' : 'var(--danger)'};">${fmt(r.netProfit)}</div>
+            </div>
+          `;
+        }).join('')}
+        <div style="display:grid;grid-template-columns:1fr 110px 110px 110px;gap:8px;padding:12px 16px;background:var(--surface2);border-top:2px solid var(--text);">
+          <span style="font-size:13px;font-weight:700;">Group Total</span>
+          <span style="font-size:13px;font-family:'DM Mono',monospace;font-weight:700;text-align:right;color:var(--success);">${fmt(totalRevenue)}</span>
+          <span style="font-size:13px;font-family:'DM Mono',monospace;font-weight:700;text-align:right;">${fmt(totalExpenses)}</span>
+          <span style="font-size:13px;font-family:'DM Mono',monospace;font-weight:700;text-align:right;color:${totalNetProfit >= 0 ? 'var(--success)' : 'var(--danger)'};">${fmt(totalNetProfit)}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Consolidated summary -->
+    <div class="statement row grand-total" style="font-size:16px;padding:16px;border-radius:var(--radius);background:var(--surface2);">
+      <span>Group Net Profit / (Loss)</span>
+      <span class="amount ${totalNetProfit >= 0 ? 'positive' : 'negative'}">${fmtAmt(totalNetProfit)}</span>
+    </div>
+  `;
+}
+
+// Per-branch tab — populate branch selector
+async function populateBranchSelect() {
+  const sel = document.getElementById('fo-branch-select');
+  if (!sel || !_franchiseList) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Select branch…</option>'
+    + [{ id: _businessId, biz_name: (_businessProfile?.biz_name || 'Head Office') + ' (Parent)' }, ...(_franchiseList || [])]
+      .map(f => `<option value="${f.id}" ${f.id === current ? 'selected' : ''}>${f.biz_name}</option>`).join('');
+  if (current) renderFranchiseBranchPnL();
+}
+
+// Per-branch tab — render full income statement for selected branch
+async function renderFranchiseBranchPnL() {
+  const el  = document.getElementById('fo-branch-body');
+  const sel = document.getElementById('fo-branch-select');
+  const fyVal = document.getElementById('fo-branch-fy')?.value || '2026';
+  if (!el || !sel?.value) return;
+
+  const bizId  = sel.value;
+  const entity = [{ id: _businessId, biz_name: _businessProfile?.biz_name || 'Head Office' }, ...(_franchiseList || [])].find(f => f.id === bizId);
+
+  el.innerHTML = `<div style="color:var(--text3);font-size:13px;">Loading…</div>`;
+
+  // Invalidate cache for fresh load
+  delete _franchisePnLCache[`${bizId}_${fyVal}`];
+  const r = await loadFranchisePnL(bizId, fyVal);
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <div style="font-family:'DM Serif Display',serif;font-size:20px;">${entity?.biz_name || 'Branch'}</div>
+      <div style="font-size:13px;color:var(--text2);">Income Statement — Year ending 30 June ${fyVal}</div>
+    </div>
+    <div class="statement row"><span>Total Revenue</span><span class="amount positive">${fmtAmt(r.revenue)}</span></div>
+    <div class="statement row"><span>Total Expenses</span><span class="amount">${fmtAmt(r.expenses)}</span></div>
+    <div style="margin-top:8px;" class="statement row grand-total">
+      <span>Net Profit / (Loss)</span>
+      <span class="amount ${r.netProfit >= 0 ? 'positive' : 'negative'}">${fmtAmt(r.netProfit)}</span>
+    </div>
+    ${r.revenue === 0 && r.expenses === 0 ? `
+      <div style="margin-top:16px;padding:14px 16px;background:var(--surface2);border-radius:8px;font-size:13px;color:var(--text3);">
+        No transactions recorded for this branch in FY${fyVal}.
+        ${bizId !== _businessId ? `<span style="cursor:pointer;color:var(--accent3);" onclick="switchBusiness('${bizId}')"> Switch to this branch to add data →</span>` : ''}
+      </div>` : ''}
+  `;
+}
+
+// Renders a group KPI row at the bottom of the main dashboard
+async function renderDashboardGroupKPIs() {
+  const el = document.getElementById('dash-group-kpis');
+  if (!el) return;
+  if (!window._franchiseList?.length) { el.style.display = 'none'; return; }
+
+  el.style.display = 'block';
+  const fyVal = '2026';
+  const allIds = [_businessId, ..._franchiseList.map(f => f.id)];
+  const results = await Promise.all(allIds.map(id => loadFranchisePnL(id, fyVal)));
+
+  const groupRev    = results.reduce((s, r) => s + r.revenue,   0);
+  const groupExp    = results.reduce((s, r) => s + r.expenses,  0);
+  const groupProfit = groupRev - groupExp;
+
+  el.innerHTML = `
+    <div class="card" style="border-left:4px solid var(--accent2);">
+      <div class="card-header flex-between">
+        <div>
+          <span class="card-title">Group Performance</span>
+          <div class="text-sm">${allIds.length} entit${allIds.length !== 1 ? 'ies' : 'y'} · FY${fyVal} · <span style="cursor:pointer;color:var(--accent3);" onclick="showPage('franchise-overview-page')">View full breakdown →</span></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="kpi-grid">
+          <div class="kpi"><div class="kpi-label">Group Revenue</div><div class="kpi-value positive">${fmt(groupRev)}</div><div class="kpi-sub">All entities</div></div>
+          <div class="kpi"><div class="kpi-label">Group Expenses</div><div class="kpi-value">${fmt(groupExp)}</div><div class="kpi-sub">All entities</div></div>
+          <div class="kpi"><div class="kpi-label">Group Net Profit</div><div class="kpi-value ${groupProfit >= 0 ? 'positive' : 'negative'}">${fmt(groupProfit)}</div><div class="kpi-sub">${groupProfit >= 0 ? 'Profitable' : 'Net loss'}</div></div>
+          <div class="kpi"><div class="kpi-label">Branches</div><div class="kpi-value">${_franchiseList.length}</div><div class="kpi-sub">Franchise branches</div></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function fmt(n) {
