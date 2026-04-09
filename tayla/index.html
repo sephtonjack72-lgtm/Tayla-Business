@@ -1006,13 +1006,13 @@
     <div class="card-body">
       <div style="padding:12px 16px;background:var(--surface2);border-radius:10px;font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.7;">
         <strong>Default behaviour</strong> — emails are sent from
-        <span style="font-family:'DM Mono',monospace;">noreply@usetayla.com.au</span>
+        <span style="font-family:'DM Mono',monospace;"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="9cf2f3eef9ecf0e5dce9eff9e8fde5f0fdb2fff3f1b2fde9">[email&#160;protected]</a></span>
         with your business email set as the reply-to address. Suppliers can reply directly to you.
         <br><br>
         <strong>Custom sending address</strong> — if you want emails to come from your own domain
-        (e.g. <span style="font-family:'DM Mono',monospace;">orders@yourvenue.com.au</span>),
+        (e.g. <span style="font-family:'DM Mono',monospace;"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="f7988593928584b78e9882858192998292d994989ad99682">[email&#160;protected]</a></span>),
         enter it below. You will need to verify your domain with Resend — contact
-        <a href="mailto:support@usetayla.com.au" style="color:var(--accent3);">support@usetayla.com.au</a>
+        <a href="/cdn-cgi/l/email-protection#13606663637c61675366607667726a7f723d707c7e3d7266" style="color:var(--accent3);"><span class="__cf_email__" data-cfemail="06757376766974724673756372677f6a672865696b286773">[email&#160;protected]</span></a>
         to get set up.
       </div>
       <div class="form-grid">
@@ -1237,6 +1237,39 @@
           </select>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Tayla Workforce Link -->
+  <div class="card section-gap">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Tayla Workforce Link</div>
+        <div class="text-sm">Connect your Workforce account to sync daily sales for UPT calculation in Stocktake.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="padding:12px 16px;background:var(--surface2);border-radius:10px;margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.7;">
+        Copy your Business ID below and paste it into Tayla Workforce →
+        Business Settings → Tayla Business Link. Once linked, actual daily sales
+        entered in Workforce will automatically appear here and be used to calculate
+        UPT (units per thousand) during stocktake.
+      </div>
+      <div class="form-group">
+        <label>Your Business ID</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="settings-business-id-display"
+            readonly
+            style="font-family:'DM Mono',monospace;font-size:12px;background:var(--surface2);color:var(--text2);cursor:default;"
+            value="Loading…">
+          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="copyBusinessId()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">This is a read-only identifier — share it with your Workforce account to enable the link.</div>
+      </div>
+      <div id="settings-biz-id-status" style="display:none;margin-top:8px;padding:8px 14px;border-radius:8px;font-size:12px;"></div>
     </div>
   </div>
 
@@ -3007,6 +3040,33 @@
   </div>
 </div>
 
+<!-- UPT Review modal -->
+<div class="modal-overlay" id="stk-upt-modal">
+  <div class="modal" style="width:640px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+    <h3>Review UPT Values</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:6px;">
+      Based on sales data from Tayla Workforce for this stocktake period, the system has
+      calculated updated UPT (units per $1,000 in sales) values for your items.
+    </p>
+    <div id="stk-upt-sales-summary" style="padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text2);margin-bottom:16px;"></div>
+    <div style="display:grid;grid-template-columns:1fr 90px 90px 80px;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:8px;">
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Current UPT</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Calculated</span>
+      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Update?</span>
+    </div>
+    <div id="stk-upt-rows" style="max-height:340px;overflow-y:auto;"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="stkUptSelectAll(true)">Update All</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="stkUptSelectAll(false)">Keep All</button>
+    </div>
+    <div class="flex-gap mt" style="justify-content:flex-end;">
+      <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="finaliseStocktake(false)">Skip &amp; Submit</button>
+      <button class="btn btn-primary btn-sm" onclick="finaliseStocktake(true)">Apply &amp; Submit</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD SOFTWARE MODAL -->
 <div class="modal-overlay" id="add-software-modal">
   <div class="modal">
@@ -3182,17 +3242,3 @@
 </div>
 
 <div id="toast"></div>
-
-<script src="db.js"></script>
-<script src="reconcile.js"></script>
-<script src="invoices.js"></script>
-<script src="bills.js"></script>
-<script src="assets.js"></script>
-<script src="receipts.js"></script>
-<script src="members.js"></script>
-<script src="import.js"></script>
-<script src="stocktake.js"></script>
-<script src="ordering.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
