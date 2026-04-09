@@ -371,9 +371,8 @@ async function generatePOFromSuggestion(supplierId) {
     unit:        i.unit || 'units',
     qty:         i.order_qty,
     unit_cost:   i.unit_cost || 0,
-    gst:         'yes',
     subtotal:    +((i.order_qty) * (i.unit_cost || 0)).toFixed(2),
-    gst_amount:  +((i.order_qty) * (i.unit_cost || 0) * 0.1).toFixed(2),
+    gst_amount:  0,
     stock_item_id: i.item_id,
   }));
 
@@ -570,7 +569,6 @@ function addPOLine(line) {
   const desc = line?.description || '';
   const qty  = line?.qty         ?? '';
   const cost = line?.unit_cost   ?? '';
-  const gst  = line?.gst         ?? 'yes';
 
   const container = document.getElementById('ord-po-lines');
   const div = document.createElement('div');
@@ -587,10 +585,6 @@ function addPOLine(line) {
       style="padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);text-align:right;font-family:'DM Mono',monospace;"
       oninput="updatePOLineCalc(this);updatePOSummary()">
     <span class="ord-col-total" style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text2);text-align:right;padding-right:4px;">—</span>
-    <select class="ord-col-gst" style="padding:7px 8px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;background:var(--bg);" onchange="updatePOSummary()">
-      <option value="yes" ${gst==='yes'?'selected':''}>GST</option>
-      <option value="no"  ${gst==='no' ?'selected':''}>No GST</option>
-    </select>
     <button class="btn btn-ghost btn-sm" onclick="this.closest('.ord-line-row').remove();updatePOSummary()" style="padding:4px 8px;color:var(--danger);">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
@@ -617,10 +611,10 @@ function getPOLines() {
     const desc    = inputs[0].value.trim();
     const qty     = parseFloat(inputs[1].value) || 0;
     const cost    = parseFloat(inputs[2].value) || 0;
-    const gst     = gstSel?.value || 'yes';
+    const gst     = null;
     const sub     = +(qty * cost).toFixed(2);
-    const gstAmt  = gst === 'yes' ? +(sub * 0.1).toFixed(2) : 0;
-    return { id: uid(), description: desc, qty, unit_cost: cost, gst, subtotal: sub, gst_amount: gstAmt };
+    const gstAmt  = 0; // GST is on the supplier bill, not the PO
+    return { id: uid(), description: desc, qty, unit_cost: cost, subtotal: sub, gst_amount: 0 };
   }).filter(l => l.description || l.qty > 0);
 }
 
@@ -637,8 +631,7 @@ function updatePOSummary() {
       <span class="mono">${fmt(subtotal)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px;">
-      <span style="color:var(--text2);">GST (10%)</span>
-      <span class="mono">${fmt(gst)}</span>
+      <span style="color:var(--text3);font-size:12px;">GST not included — add on supplier bill when received</span>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;border-top:2px solid var(--text);padding-top:8px;margin-top:4px;">
       <span>Total</span>
@@ -661,8 +654,8 @@ async function savePOAs(status) {
   if (!lines.length) { toast('Add at least one line item'); return; }
 
   const subtotal  = lines.reduce((s, l) => s + l.subtotal,   0);
-  const gst_total = lines.reduce((s, l) => s + l.gst_amount, 0);
-  const total     = +(subtotal + gst_total).toFixed(2);
+  const gst_total = 0; // GST excluded from PO — on supplier bill only
+  const total     = +subtotal.toFixed(2);
 
   let po;
   if (editId) {
@@ -730,30 +723,30 @@ function viewPO(id) {
 
   // Lines table
   document.getElementById('ord-detail-lines').innerHTML = `
-    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;">Line Items</div>
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;">Line Items <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3);"> — all amounts ex-GST</span></div>
     <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
-      <div style="display:grid;grid-template-columns:1fr 70px 100px 90px 80px;gap:8px;padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);">
+      <div style="display:grid;grid-template-columns:1fr 70px 100px 90px;gap:8px;padding:8px 16px;background:var(--surface2);border-bottom:1px solid var(--border);">
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Description</span>
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Qty</span>
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Unit Cost</span>
         <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Subtotal</span>
-        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">GST</span>
       </div>
       ${(po.lines || []).map(l => `
-        <div style="display:grid;grid-template-columns:1fr 70px 100px 90px 80px;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);">
+        <div style="display:grid;grid-template-columns:1fr 70px 100px 90px;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border);">
           <div style="font-size:13px;font-weight:500;">${l.description}</div>
           <div style="font-size:13px;font-family:'DM Mono',monospace;">${l.qty}</div>
           <div style="font-size:13px;font-family:'DM Mono',monospace;">${fmt(l.unit_cost)}</div>
           <div style="font-size:13px;font-family:'DM Mono',monospace;">${fmt(l.subtotal)}</div>
-          <div style="font-size:12px;color:var(--text3);">${l.gst === 'yes' ? fmt(l.gst_amount) : 'No GST'}</div>
         </div>
       `).join('')}
-      <div style="display:grid;grid-template-columns:1fr 70px 100px 90px 80px;gap:8px;padding:10px 16px;background:var(--surface2);">
-        <span style="font-weight:600;">Total</span>
+      <div style="display:grid;grid-template-columns:1fr 70px 100px 90px;gap:8px;padding:10px 16px;background:var(--surface2);">
+        <span style="font-weight:600;">Total (ex-GST)</span>
         <span></span>
         <span></span>
-        <span style="font-weight:600;font-family:'DM Mono',monospace;">${fmt(po.subtotal)}</span>
-        <span style="font-weight:600;font-family:'DM Mono',monospace;">${fmt(po.gst_total)}</span>
+        <span style="font-weight:600;font-family:'DM Mono',monospace;">${fmt(po.subtotal || po.total)}</span>
+      </div>
+      <div style="padding:8px 16px;background:var(--surface2);border-top:1px solid var(--border);">
+        <span style="font-size:11px;color:var(--text3);">GST will be confirmed on the supplier's invoice when goods are received.</span>
       </div>
     </div>
   `;
@@ -889,6 +882,10 @@ function openReceiveModal(id) {
           data-po-price="${l.unit_cost}"
           oninput="checkPriceVariance(this)"
           style="text-align:right;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400;white-space:nowrap;">
+          <input type="checkbox" class="ord-col-gst" checked style="width:auto;padding:0;border:none;accent-color:var(--accent);cursor:pointer;">
+          GST
+        </label>
       </div>
     `;
   }).join('');
@@ -927,18 +924,20 @@ async function confirmGoodsReceived() {
     const lineId      = row.dataset.lineId;
     const qtyReceived = parseFloat(row.querySelector('input[type=number]').value) || 0;
     const actualPrice = parseFloat(row.querySelector('input.ord-col-price')?.value) || 0;
+    const gstChecked  = row.querySelector('input.ord-col-gst')?.checked ?? true;
     const poLine      = po.lines.find(l => l.id === lineId);
     if (qtyReceived > 0 && poLine) {
+      const subtotal = +(qtyReceived * actualPrice).toFixed(2);
       receiptLines.push({
-        line_id:       lineId,
-        description:   poLine.description,
-        qty_ordered:   poLine.qty,
-        qty_received:  qtyReceived,
-        po_unit_cost:  poLine.unit_cost,
+        line_id:          lineId,
+        description:      poLine.description,
+        qty_ordered:      poLine.qty,
+        qty_received:     qtyReceived,
+        po_unit_cost:     poLine.unit_cost,
         actual_unit_cost: actualPrice,
-        subtotal:      +(qtyReceived * actualPrice).toFixed(2),
-        gst_amount:    poLine.gst === 'yes' ? +(qtyReceived * actualPrice * 0.1).toFixed(2) : 0,
-        gst:           poLine.gst,
+        subtotal,
+        gst:              gstChecked ? 'yes' : 'no',
+        gst_amount:       gstChecked ? +(subtotal * 0.1).toFixed(2) : 0,
       });
     }
   });
@@ -1237,7 +1236,6 @@ function getStandingLines() {
       description: inputs[0].value.trim(),
       qty:         parseFloat(inputs[1].value) || 0,
       unit_cost:   parseFloat(inputs[2].value) || 0,
-      gst:         'yes',
     };
   }).filter(l => l.description || l.qty > 0);
 }
@@ -1291,9 +1289,8 @@ async function generatePOFromStanding(id) {
     description: l.description,
     qty:         l.qty,
     unit_cost:   l.unit_cost || 0,
-    gst:         l.gst || 'yes',
     subtotal:    +(l.qty * (l.unit_cost || 0)).toFixed(2),
-    gst_amount:  l.gst !== 'no' ? +(l.qty * (l.unit_cost || 0) * 0.1).toFixed(2) : 0,
+    gst_amount:  0,
   }));
 
   const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === so.supplier_id);
@@ -1592,9 +1589,7 @@ function buildPOHtml(po, supplier, biz, lines) {
           <td>${l.description}</td>
           <td class="mono text-right">${l.qty}</td>
           <td class="mono text-right">$${(l.unit_cost || 0).toFixed(2)}</td>
-          <td class="mono text-right">$${(l.subtotal  || 0).toFixed(2)}</td>
-          <td class="mono text-right">${l.gst === 'yes' ? '$' + (l.gst_amount || 0).toFixed(2) : 'N/A'}</td>
-          <td class="mono text-right" style="font-weight:600;">$${((l.subtotal || 0) + (l.gst_amount || 0)).toFixed(2)}</td>
+          <td class="mono text-right" style="font-weight:600;">$${(l.subtotal || 0).toFixed(2)}</td>
         </tr>
       `).join('')}
     </tbody>
