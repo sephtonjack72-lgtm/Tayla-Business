@@ -55,26 +55,57 @@ let _exchangeRates   = {};
 async function loadAllBusinesses() {
   if (!_currentUser) return;
 
-  // Businesses owned by this user
+  // Businesses owned by this user — only ROOT businesses (no parent)
   const { data: owned } = await _supabase
     .from('businesses')
     .select('*')
-    .eq('user_id', _currentUser.id);
+    .eq('user_id', _currentUser.id)
+    .is('parent_business_id', null);
 
-  // Businesses this user is a member of (accountant/admin access)
+  // Franchise branches owned by this user (child businesses)
+  const { data: ownedFranchises } = await _supabase
+    .from('businesses')
+    .select('*')
+    .eq('user_id', _currentUser.id)
+    .not('parent_business_id', 'is', null);
+
+  // Businesses this user is an active member of
   const { data: memberships } = await _supabase
     .from('business_members')
-    .select('*, businesses(*)')
+    .select('id, role, permission_set, business_id')
     .eq('user_id', _currentUser.id)
     .eq('status', 'active');
 
-  const memberBizzes = (memberships || [])
-    .map(m => ({ ...m.businesses, _role: m.role, _membershipId: m.id, _permissionSet: m.permission_set || 'full_access' }))
-    .filter(Boolean);
+  // Fetch the actual business details for memberships separately
+  let memberBizzes = [];
+  if (memberships?.length) {
+    const bizIds = memberships.map(m => m.business_id);
+    const { data: memberBizData } = await _supabase
+      .from('businesses')
+      .select('*')
+      .in('id', bizIds);
+
+    memberBizzes = (memberBizData || []).map(biz => {
+      const membership = memberships.find(m => m.business_id === biz.id);
+      return {
+        ...biz,
+        _role:          membership?.role || 'accountant',
+        _membershipId:  membership?.id,
+        _permissionSet: membership?.permission_set || 'full_access',
+      };
+    }).filter(Boolean);
+  }
+
+  // Combine: owned root + owned franchises + member businesses (deduped)
+  const ownedIds = new Set([
+    ...(owned || []).map(b => b.id),
+    ...(ownedFranchises || []).map(b => b.id),
+  ]);
 
   _allBusinesses = [
-    ...(owned || []).map(b => ({ ...b, _role: 'owner' })),
-    ...memberBizzes.filter(b => !(owned || []).some(o => o.id === b.id)),
+    ...(owned || []).map(b => ({ ...b, _role: 'owner', _isFranchise: false })),
+    ...(ownedFranchises || []).map(b => ({ ...b, _role: 'owner', _isFranchise: true })),
+    ...memberBizzes.filter(b => !ownedIds.has(b.id)),
   ];
 
   renderBizSwitcher();
@@ -87,33 +118,36 @@ function renderBizSwitcher() {
   if (!wrap || !listEl) return;
 
   // Only show switcher if user has access to 2+ businesses
-  if (_allBusinesses.length > 1) {
-    wrap.style.display = 'block';
-  } else {
-    wrap.style.display = 'none';
-  }
+  wrap.style.display = _allBusinesses.length > 1 ? 'block' : 'none';
 
   if (nameEl && _businessProfile) {
     nameEl.textContent = _businessProfile.biz_name || 'Business';
   }
 
   if (listEl) {
-    listEl.innerHTML = _allBusinesses.map(b => `
-      <div onclick="switchBusiness('${b.id}')" style="
-        padding:11px 16px;font-size:13px;cursor:pointer;
-        display:flex;align-items:center;justify-content:space-between;
-        background:${b.id === _businessProfile?.id ? 'var(--surface2)' : ''};
-        border-bottom:1px solid var(--border);
-      " onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${b.id === _businessProfile?.id ? 'var(--surface2)' : ''}'">
-        <span style="font-weight:${b.id === _businessProfile?.id ? '600' : '400'};">${b.biz_name || 'Unnamed Business'}</span>
-        <span style="font-size:11px;color:var(--text3);">${
-          b._role === 'owner' ? 'Owner' :
-          b._role === 'admin' ? 'Admin' :
-          b._role === 'manager' ? `Manager · ${PERMISSION_SETS[b._permissionSet || 'full_access']?.label || 'Full Access'}` :
-          '👁 Accountant'
-        }</span>
-      </div>
-    `).join('');
+    listEl.innerHTML = _allBusinesses.map(b => {
+      const isActive   = b.id === _businessProfile?.id;
+      const roleLabel  = b._role === 'owner' && b._isFranchise ? '📍 Branch'
+        : b._role === 'owner'   ? '👑 Owner'
+        : b._role === 'admin'   ? '⚙ Admin'
+        : b._role === 'manager' ? `🔧 Manager · ${PERMISSION_SETS[b._permissionSet || 'full_access']?.label || ''}`
+        : '👁 Accountant';
+      return `
+        <div onclick="switchBusiness('${b.id}')" style="
+          padding:11px 16px;font-size:13px;cursor:pointer;
+          display:flex;align-items:center;justify-content:space-between;gap:12px;
+          background:${isActive ? 'var(--surface2)' : ''};
+          border-bottom:1px solid var(--border);
+        " onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${isActive ? 'var(--surface2)' : ''}' ">
+          <div style="min-width:0;">
+            <div style="font-weight:${isActive ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${b.biz_name || 'Unnamed Business'}
+            </div>
+          </div>
+          <span style="font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0;">${roleLabel}</span>
+        </div>
+      `;
+    }).join('');
   }
 }
 
@@ -364,10 +398,10 @@ async function removeMember(memberId) {
 async function checkPendingInvites() {
   if (!_currentUser?.id) return false;
 
-  // First: activate any invites already matched to this user_id
+  // Activate any invites already matched to this user_id
   const { data: byUserId } = await _supabase
     .from('business_members')
-    .select('*')
+    .select('id')
     .eq('user_id', _currentUser.id)
     .eq('status', 'pending');
 
@@ -380,15 +414,14 @@ async function checkPendingInvites() {
     return true;
   }
 
-  // Second: claim any pending invites matching this user's email
-  // We do this via update (not select) since UPDATE policy allows user_id match
-  // The invite row has user_id = null until claimed, so we match on email via RPC
+  // Claim pending invites matched by email via secure RPC
   if (_currentUser?.email) {
     const { data: claimed } = await _supabase.rpc('claim_pending_invites', {
       p_email:   _currentUser.email,
       p_user_id: _currentUser.id,
-    });
-    return !!(claimed && claimed > 0);
+    }).maybeSingle();
+    // claimed is the count of rows updated — any number > 0 means success
+    return claimed > 0;
   }
 
   return false;
