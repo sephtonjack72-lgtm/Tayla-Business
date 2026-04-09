@@ -386,6 +386,9 @@
   </div>
   <!-- Read-only banner for accountants -->
   <div id="readonly-banner" style="display:none;background:rgba(232,197,71,.15);border:1px solid var(--accent2);border-radius:8px;padding:6px 14px;font-size:12px;color:var(--accent2);font-weight:500;">
+  <div id="manager-banner" style="display:none;background:rgba(99,179,237,.12);border:1px solid #63b3ed;border-radius:8px;padding:6px 14px;font-size:12px;color:#2b6cb0;font-weight:500;">
+    🔧 Manager access — <span id="manager-perm-label">Full Access</span>
+  </div>
     👁 Accountant view — read only
   </div>
   <div class="header-actions">
@@ -1242,14 +1245,55 @@
       </div>
     </div>
     <div class="card-body">
-      <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
-        <input type="email" id="invite-email" placeholder="accountant@example.com" style="flex:1;min-width:200px;">
-        <select id="invite-role" style="padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
-          <option value="accountant">Accountant (read-only)</option>
-          <option value="admin">Admin (full access)</option>
-        </select>
-        <button class="btn btn-primary btn-sm" onclick="inviteMember()">Send Invite</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="form-group" style="margin:0;">
+          <label>Email Address</label>
+          <input type="email" id="invite-email" placeholder="accountant@example.com">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Role</label>
+          <select id="invite-role" onchange="togglePermissionSetRow()" style="padding:10px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);font-family:'DM Sans',sans-serif;">
+            <option value="accountant">Accountant — read only</option>
+            <option value="manager">Manager — customisable access</option>
+            <option value="admin">Admin — full access</option>
+          </select>
+        </div>
       </div>
+      <div id="permission-set-row" style="display:none;margin-bottom:12px;padding:12px 16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">Manager Permission Set</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg);text-transform:none;letter-spacing:0;font-weight:400;">
+            <input type="radio" name="perm-set" id="perm-full" value="full_access" checked style="margin-top:2px;width:auto;padding:0;border:none;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;">Full Access</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">All tabs — cannot mark bills/invoices paid or post journal entries</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg);text-transform:none;letter-spacing:0;font-weight:400;">
+            <input type="radio" name="perm-set" id="perm-ops" value="operations" style="margin-top:2px;width:auto;padding:0;border:none;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;">Operations</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">Dashboard, Stocktake, Ordering, Invoices (draft only)</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg);text-transform:none;letter-spacing:0;font-weight:400;">
+            <input type="radio" name="perm-set" id="perm-fin" value="financials" style="margin-top:2px;width:auto;padding:0;border:none;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;">Financials</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">Dashboard, Transactions, Invoices, Bills, Reports, Ledger, Reconcile</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;background:var(--bg);text-transform:none;letter-spacing:0;font-weight:400;">
+            <input type="radio" name="perm-set" id="perm-ro" value="read_only" style="margin-top:2px;width:auto;padding:0;border:none;flex-shrink:0;">
+            <div>
+              <div style="font-size:13px;font-weight:600;">Read Only</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">All tabs — view only, no create, edit or status changes</div>
+            </div>
+          </label>
+        </div>
+        <input type="hidden" id="invite-permission-set" value="full_access">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="submitInviteMember()">Send Invite</button>
       <div id="members-list">
         <div style="font-size:13px;color:var(--text3);">No team members yet.</div>
       </div>
@@ -1283,6 +1327,41 @@
             <option value="yes">Yes — allow foreign currency entries</option>
           </select>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Franchise Setup -->
+  <div class="card section-gap" id="franchise-setup-section">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Franchise Branches</div>
+        <div class="text-sm">Link franchise branches to this parent account. Each branch operates independently and sends finalised data here.</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <!-- Franchise overview list (populated by loadFranchises) -->
+      <div id="franchise-overview-list" style="margin-bottom:20px;">
+        <div style="font-size:13px;color:var(--text3);">Loading…</div>
+      </div>
+
+      <!-- Link new franchise form -->
+      <div style="border-top:1px solid var(--border);padding-top:20px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Link a Franchise Branch</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.6;">
+          Get the connector code from Tayla Workforce → Account Settings → Team → Franchises. Each franchise has its own unique code.
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="form-group" style="flex:1;min-width:200px;margin:0;">
+            <label>Connector Code</label>
+            <input type="text" id="franchise-connector-code"
+              placeholder="e.g. TF-A3K9B2"
+              style="font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.5px;">
+          </div>
+          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="testFranchiseCode()">Test Code</button>
+          <button class="btn btn-primary btn-sm" style="flex-shrink:0;" onclick="linkFranchise()">Link Franchise</button>
+        </div>
+        <div id="franchise-link-status" style="margin-top:10px;font-size:12px;min-height:18px;"></div>
       </div>
     </div>
   </div>
@@ -2813,13 +2892,12 @@
       </button>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px 60px;gap:8px;padding:6px 14px;background:var(--surface2);border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;margin-bottom:0;">
+    <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px;gap:8px;padding:6px 14px;background:var(--surface2);border-radius:8px 8px 0 0;border:1px solid var(--border);border-bottom:none;margin-bottom:0;">
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Item</span>
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Ordered</span>
       <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Received</span>
       <span class="ord-col-unit" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">PO Price</span>
       <span class="ord-col-price" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">Actual Price</span>
-      <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text3);">GST?</span>
     </div>
     <div class="card" style="border-radius:0 0 var(--radius) var(--radius);">
       <div id="ord-receive-lines" style="padding:0;"></div>
@@ -2951,10 +3029,6 @@
           PDF
         </button>
         <button class="btn btn-ghost btn-sm" style="color:var(--text);" id="ord-detail-edit-btn" onclick="closeModal('ord-po-detail-modal');openEditPOModal(_viewingPO?.id)">Edit</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--accent3);" id="ord-detail-portal-btn" onclick="openSupplierPortal(_viewingPO?.supplier_id)" style="display:none;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-          Open Order Portal
-        </button>
         <button class="btn btn-primary btn-sm" id="ord-detail-send-btn" onclick="savePOFromDetail()">Send PO</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--text);" id="ord-detail-email-btn" onclick="emailPOToSupplier(_viewingPO?.id)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
@@ -3079,11 +3153,6 @@
           <option value="Net 60">Net 60</option>
           <option value="EOM">EOM — End of Month</option>
         </select>
-      </div>
-      <div class="form-group" style="grid-column:1/-1;">
-        <label>Order Portal URL <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
-        <input type="url" id="stk-supplier-portal" placeholder="e.g. https://portal.supplier.com.au">
-        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Staff will see an "Open Order Portal" button when viewing POs for this supplier.</div>
       </div>
     </div>
     <div class="flex-gap mt" style="justify-content:flex-end;">
