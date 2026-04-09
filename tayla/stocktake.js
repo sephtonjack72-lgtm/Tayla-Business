@@ -825,6 +825,28 @@ async function finaliseStocktake(applyUpt) {
 
   showStocktakeTab('history');
   toast('Stocktake submitted ✓ Journals posted');
+
+  // If this is a franchise branch, notify the parent account
+  if (_businessProfile?.parent_business_id && typeof postFranchiseEvent === 'function') {
+    const countedItems  = (session.items || []).filter(i => i.count !== null).length;
+    const totalItems    = (session.items || []).length;
+    const belowOnHand   = (session.items || []).filter(i => i.variance !== null && i.variance < 0).length;
+    const varianceValue = (session.items || []).reduce((s, i) => {
+      if (i.variance === null || i.variance >= 0 || !i.unit_cost) return s;
+      return s + Math.abs(i.variance * i.unit_cost);
+    }, 0);
+
+    postFranchiseEvent('stocktake_submitted', {
+      summary: `${countedItems} of ${totalItems} items counted · ${belowOnHand} variance${belowOnHand !== 1 ? 's' : ''}`,
+      details: `Date: ${session.date} · Staff: ${session.staff_name}${varianceValue > 0 ? ` · Est. variance value: $${varianceValue.toFixed(2)}` : ''}`,
+      session_date:    session.date,
+      staff_name:      session.staff_name,
+      counted_items:   countedItems,
+      total_items:     totalItems,
+      below_on_hand:   belowOnHand,
+      variance_value:  +varianceValue.toFixed(2),
+    });
+  }
 }
 
 // ══════════════════════════════════════════════════════
