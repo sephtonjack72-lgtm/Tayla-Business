@@ -156,7 +156,10 @@ function applyProfileToApp(profile) {
             window._franchiseList = data || [];
             const navTab = document.getElementById('nav-franchises-tab');
             if (navTab) navTab.style.display = _franchiseList.length > 0 ? '' : 'none';
-            if (_franchiseList.length > 0) renderDashboardGroupKPIs();
+            if (_franchiseList.length > 0) {
+              renderDashboardGroupKPIs();
+              renderNotifBell();
+            }
           });
       }
     });
@@ -3964,7 +3967,7 @@ async function loadFranchisePnL(businessId, fyVal) {
 
 // Show/hide franchise tabs
 function showFranchiseTab(tab) {
-  ['overview', 'combined', 'branch'].forEach(t => {
+  ['overview', 'combined', 'branch', 'notifications'].forEach(t => {
     const panel = document.getElementById(`fo-${t}`);
     if (panel) panel.style.display = t === tab ? 'block' : 'none';
     const btn = document.getElementById(`fotab-${t}`);
@@ -3974,9 +3977,10 @@ function showFranchiseTab(tab) {
       btn.style.borderBottomColor = t === tab ? 'var(--accent2)' : 'transparent';
     }
   });
-  if (tab === 'overview')  renderFranchiseOverview();
-  if (tab === 'combined')  renderFranchiseCombinedPnL();
-  if (tab === 'branch')    populateBranchSelect();
+  if (tab === 'overview')       renderFranchiseOverview();
+  if (tab === 'combined')       renderFranchiseCombinedPnL();
+  if (tab === 'branch')         populateBranchSelect();
+  if (tab === 'notifications')  renderFranchiseNotifications();
 }
 
 // Entry point — called when Franchises page is shown
@@ -4228,6 +4232,223 @@ async function renderDashboardGroupKPIs() {
       </div>
     </div>
   `;
+}
+
+// ══════════════════════════════════════════════════════
+//  FRANCHISE NOTIFICATIONS & FINALISATION
+// ══════════════════════════════════════════════════════
+
+const EVENT_LABELS = {
+  stocktake_submitted: { icon: '📦', label: 'Stocktake Submitted' },
+  period_closed:       { icon: '📅', label: 'Period Closed' },
+  po_received:         { icon: '🚚', label: 'Goods Received' },
+};
+
+// Post a finalisation event from a franchise to the parent
+async function postFranchiseEvent(eventType, eventData = {}) {
+  if (!_businessId || !_businessProfile?.parent_business_id) return;
+
+  const { error } = await _supabase.from('franchise_events').insert({
+    parent_business_id:    _businessProfile.parent_business_id,
+    franchise_business_id: _businessId,
+    franchise_name:        _businessProfile.biz_name || 'Branch',
+    event_type:            eventType,
+    event_data:            eventData,
+    seen_by_parent:        false,
+    created_at:            new Date().toISOString(),
+  });
+
+  if (error) console.warn('postFranchiseEvent failed:', error.message);
+}
+
+// Load unseen events for this parent business
+async function loadFranchiseEvents(unseenOnly = false) {
+  if (!_businessId || _userRole !== 'owner') return [];
+  let query = _supabase
+    .from('franchise_events')
+    .select('*')
+    .eq('parent_business_id', _businessId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (unseenOnly) query = query.eq('seen_by_parent', false);
+  const { data } = await query;
+  return data || [];
+}
+
+// Mark events as seen
+async function markEventsSeen(eventIds) {
+  if (!eventIds?.length) return;
+  await _supabase.from('franchise_events')
+    .update({ seen_by_parent: true })
+    .in('id', eventIds);
+}
+
+async function markAllNotifSeen() {
+  if (!_businessId) return;
+  await _supabase.from('franchise_events')
+    .update({ seen_by_parent: true })
+    .eq('parent_business_id', _businessId)
+    .eq('seen_by_parent', false);
+  renderNotifBell();
+  renderFranchiseNotifications();
+}
+
+// ── Notification bell
+async function renderNotifBell() {
+  const wrap  = document.getElementById('notif-bell-wrap');
+  const badge = document.getElementById('notif-badge');
+  if (!wrap || _userRole !== 'owner') return;
+
+  // Only show if franchises exist
+  if (!window._franchiseList?.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+
+  const unseen = await loadFranchiseEvents(true);
+  if (badge) {
+    badge.style.display = unseen.length > 0 ? 'block' : 'none';
+    badge.textContent   = unseen.length > 9 ? '9+' : unseen.length;
+  }
+}
+
+function toggleNotifPanel() {
+  const panel = document.getElementById('notif-panel');
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) renderNotifPanelList();
+}
+
+// Close notif panel when clicking outside
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('notif-bell-wrap');
+  const panel = document.getElementById('notif-panel');
+  if (wrap && panel && !wrap.contains(e.target)) panel.style.display = 'none';
+});
+
+async function renderNotifPanelList() {
+  const el = document.getElementById('notif-list');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:16px;text-align:center;color:#9f9fba;font-size:13px;">Loading…</div>';
+
+  const events = await loadFranchiseEvents(false);
+
+  if (!events.length) {
+    el.innerHTML = '<div style="padding:20px 16px;text-align:center;color:#9f9fba;font-size:13px;">No branch activity yet</div>';
+    return;
+  }
+
+  el.innerHTML = events.slice(0, 8).map(e => {
+    const meta = EVENT_LABELS[e.event_type] || { icon: '📋', label: e.event_type };
+    const age  = formatEventAge(e.created_at);
+    return `
+      <div style="
+        display:flex;gap:12px;align-items:flex-start;
+        padding:12px 16px;border-bottom:1px solid #444455;
+        background:${e.seen_by_parent ? 'transparent' : 'rgba(99,179,237,.06)'};
+      ">
+        <span style="font-size:18px;flex-shrink:0;">${meta.icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:${e.seen_by_parent ? '400' : '600'};color:#e8e8f0;">
+            ${e.franchise_name}
+          </div>
+          <div style="font-size:12px;color:#9f9fba;margin-top:1px;">${meta.label}</div>
+          ${e.event_data?.summary ? `<div style="font-size:11px;color:#7f7f9a;margin-top:3px;">${e.event_data.summary}</div>` : ''}
+        </div>
+        <div style="font-size:11px;color:#7f7f9a;white-space:nowrap;flex-shrink:0;">${age}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Mark visible events as seen
+  const unseenIds = events.filter(e => !e.seen_by_parent).map(e => e.id);
+  if (unseenIds.length) {
+    markEventsSeen(unseenIds).then(() => {
+      const badge = document.getElementById('notif-badge');
+      if (badge) badge.style.display = 'none';
+    });
+  }
+}
+
+// ── Full notifications tab in Franchise Overview page
+async function renderFranchiseNotifications() {
+  const el        = document.getElementById('fo-notif-list');
+  const filterSel = document.getElementById('fo-notif-filter');
+  if (!el) return;
+
+  el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">Loading…</div>';
+
+  // Populate filter
+  if (filterSel && _franchiseList?.length) {
+    const current = filterSel.value;
+    filterSel.innerHTML = '<option value="">All branches</option>'
+      + (_franchiseList || []).map(f => `<option value="${f.id}" ${f.id === current ? 'selected' : ''}>${f.biz_name}</option>`).join('');
+    filterSel.value = current;
+  }
+
+  const events = await loadFranchiseEvents(false);
+  const filtered = filterSel?.value
+    ? events.filter(e => e.franchise_business_id === filterSel.value)
+    : events;
+
+  // Update badge in tab
+  const unseenCount = events.filter(e => !e.seen_by_parent).length;
+  const tabBadge = document.getElementById('fo-notif-badge');
+  if (tabBadge) {
+    tabBadge.style.display = unseenCount > 0 ? 'inline' : 'none';
+    tabBadge.textContent   = unseenCount;
+  }
+
+  if (!filtered.length) {
+    el.innerHTML = `
+      <div style="padding:40px;text-align:center;color:var(--text3);font-size:13px;">
+        <div style="font-size:32px;margin-bottom:12px;">📭</div>
+        No branch activity yet. Events will appear here when franchises submit stocktakes or close periods.
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = filtered.map(e => {
+    const meta = EVENT_LABELS[e.event_type] || { icon: '📋', label: e.event_type };
+    const age  = formatEventAge(e.created_at);
+    return `
+      <div style="
+        display:flex;gap:14px;align-items:flex-start;
+        padding:14px 20px;border-bottom:1px solid var(--border);
+        background:${e.seen_by_parent ? '' : 'rgba(99,179,237,.04)'};
+      ">
+        <div style="font-size:24px;flex-shrink:0;margin-top:2px;">${meta.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+            <span style="font-size:13px;font-weight:600;">${e.franchise_name}</span>
+            <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:var(--surface2);color:var(--text3);">${meta.label}</span>
+            ${!e.seen_by_parent ? '<span style="font-size:10px;padding:2px 6px;border-radius:99px;background:#ebf8ff;color:#2b6cb0;font-weight:600;">New</span>' : ''}
+          </div>
+          ${e.event_data?.summary ? `<div style="font-size:12px;color:var(--text2);margin-top:2px;">${e.event_data.summary}</div>` : ''}
+          ${e.event_data?.details ? `
+            <div style="margin-top:8px;padding:8px 12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text3);">
+              ${e.event_data.details}
+            </div>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--text3);white-space:nowrap;flex-shrink:0;">${age}</div>
+      </div>
+    `;
+  }).join('');
+
+  // Mark all as seen
+  const unseenIds = filtered.filter(e => !e.seen_by_parent).map(e => e.id);
+  if (unseenIds.length) markEventsSeen(unseenIds);
+}
+
+function formatEventAge(isoStr) {
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 1)   return 'just now';
+  if (mins < 60)  return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  if (days < 7)   return `${days}d ago`;
+  return new Date(isoStr).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
 }
 
 function fmt(n) {
