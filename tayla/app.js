@@ -40,6 +40,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
+// ── Auto-refresh when returning to tab after 5+ seconds away
+let _lastVisible = Date.now();
+let _appReady    = false;
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    _lastVisible = Date.now();
+    return;
+  }
+  const awayMs = Date.now() - _lastVisible;
+  if (awayMs > 5000 && _appReady) {
+    window.location.reload();
+  }
+});
+
 async function afterLogin() {
   // Check and activate any pending invites for this user
   if (typeof checkPendingInvites === 'function') await checkPendingInvites();
@@ -129,6 +144,7 @@ function applyProfileToApp(profile) {
       if (typeof dbLoadStandingOrders === 'function') dbLoadStandingOrders();
       if (typeof checkDueStandingOrders === 'function') setTimeout(checkDueStandingOrders, 2000);
       renderAll();
+      _appReady = true;
       // Re-render software settings after data is available
       setTimeout(() => renderSoftwareSettings(), 500);
     });
