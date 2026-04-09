@@ -132,7 +132,7 @@ async function dbDeleteStocktakeSession(id) {
 // ══════════════════════════════════════════════════════
 
 function showStocktakeTab(tab) {
-  ['catalogue', 'newcount', 'history'].forEach(t => {
+  ['catalogue', 'newcount', 'history', 'upt'].forEach(t => {
     const panel = document.getElementById(`stk-${t}`);
     if (panel) panel.style.display = t === tab ? 'block' : 'none';
     const btn = document.getElementById(`stktab-${t}`);
@@ -146,6 +146,7 @@ function showStocktakeTab(tab) {
   if (tab === 'catalogue') { renderCatalogue(); renderSuppliersList(); renderStkKpis(); }
   if (tab === 'newcount')  { renderNewCountTab(); }
   if (tab === 'history')   { renderSessionHistory(); }
+  if (tab === 'upt')       { renderUptReviewTab(); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -1388,4 +1389,356 @@ if (typeof closeModal === 'undefined') {
  */
 function getLatestSubmittedSession() {
   return stocktakeSessions.find(s => s.status === 'submitted') || null;
+}
+
+// ══════════════════════════════════════════════════════
+//  UPT REVIEW TAB
+// ══════════════════════════════════════════════════════
+
+// Shared UPT calculation — used by both the tab and the dashboard
+async function calcUptForAllItems() {
+  if (typeof dbLoadSalesSummary !== 'function') return null;
+
+  const submitted = stocktakeSessions.filter(s => s.status === 'submitted');
+  if (submitted.length < 1) return null;
+
+  // Use last two stocktakes to establish period; or last one + 30 days back
+  const latest  = submitted[0];
+  const previous = submitted[1] || null;
+  const toDate   = latest.date;
+  const fromDate = previous ? previous.date : (() => {
+    const d = new Date(toDate); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0];
+  })();
+
+  const salesRows = await dbLoadSalesSummary(fromDate, toDate);
+  if (!salesRows.length) return null;
+
+  const totalRevenue = salesRows.reduce((s, r) => s + (r.total_revenue || 0), 0);
+  if (totalRevenue <= 0) return null;
+
+  // Received quantities from POs in the period
+  const poReceipts = (typeof purchaseOrders !== 'undefined' ? purchaseOrders : [])
+    .filter(po => po.status !== 'voided' && po.date >= fromDate && po.date <= toDate);
+
+  const results = [];
+  for (const sessionItem of (latest.items || [])) {
+    if (sessionItem.count === null) continue;
+
+    let received = 0;
+    for (const po of poReceipts) {
+      for (const receipt of (po.receipts || [])) {
+        for (const rl of (receipt.lines || [])) {
+          if (
+            (rl.stock_item_id && rl.stock_item_id === sessionItem.item_id) ||
+            (!rl.stock_item_id && rl.description?.toLowerCase() === sessionItem.name?.toLowerCase())
+          ) {
+            received += rl.qty_received || 0;
+          }
+        }
+      }
+    }
+
+    const opening  = sessionItem.on_hand ?? 0;
+    const consumed = +(opening + received - sessionItem.count).toFixed(3);
+    if (consumed <= 0) continue;
+
+    const calculatedUpt = +(consumed / (totalRevenue / 1000)).toFixed(3);
+    const catalogueItem = stockItems.find(i => i.id === sessionItem.item_id);
+    const currentUpt    = catalogueItem?.upt ?? null;
+
+    const isNew     = currentUpt === null;
+    const pctChange = currentUpt ? Math.abs(calculatedUpt - currentUpt) / Math.max(currentUpt, 0.001) : 1;
+    const changed   = pctChange > 0.05;
+
+    if (!isNew && !changed) continue;
+
+    results.push({
+      item_id:        sessionItem.item_id,
+      name:           sessionItem.name,
+      category:       sessionItem.category,
+      unit:           sessionItem.unit || 'units',
+      current_upt:    currentUpt,
+      calculated_upt: calculatedUpt,
+      consumed,
+      received,
+      is_new:         isNew,
+      pct_change:     pctChange,
+      from_date:      fromDate,
+      to_date:        toDate,
+      total_revenue:  totalRevenue,
+    });
+  }
+
+  return { results, fromDate, toDate, totalRevenue, salesRows };
+}
+
+async function renderUptReviewTab() {
+  const noDataEl   = document.getElementById('stk-upt-no-data');
+  const contentEl  = document.getElementById('stk-upt-tab-content');
+  const bannerEl   = document.getElementById('stk-upt-pending-banner');
+  const sourceEl   = document.getElementById('stk-upt-tab-source');
+  const rowsEl     = document.getElementById('stk-upt-tab-rows');
+  if (!rowsEl) return;
+
+  // Show loading state
+  if (contentEl) contentEl.style.display = 'none';
+  if (noDataEl)  noDataEl.style.display  = 'none';
+  if (bannerEl)  bannerEl.style.display  = 'none';
+  rowsEl.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px;">Calculating…</div>`;
+  if (contentEl) contentEl.style.display = 'block';
+
+  const calc = await calcUptForAllItems();
+
+  if (!calc || !calc.results.length) {
+    if (contentEl) contentEl.style.display = 'none';
+    if (noDataEl)  noDataEl.style.display  = 'block';
+    if (sourceEl)  sourceEl.textContent    = 'No Workforce sales data available for UPT calculation';
+    return;
+  }
+
+  const { results, fromDate, toDate, totalRevenue } = calc;
+  const pendingCount = results.length;
+
+  if (sourceEl) {
+    sourceEl.textContent = `Period: ${fmtDate(fromDate)} → ${fmtDate(toDate)} · Revenue: ${fmt(totalRevenue)} · ${pendingCount} item${pendingCount !== 1 ? 's' : ''} to review`;
+  }
+
+  if (bannerEl && pendingCount > 0) {
+    bannerEl.style.display = 'flex';
+    const pendingTextEl = document.getElementById('stk-upt-pending-text');
+    if (pendingTextEl) pendingTextEl.textContent = `${pendingCount} item${pendingCount !== 1 ? 's have' : ' has'} a UPT change of more than 5%`;
+  }
+
+  // Group by category
+  const byCategory = {};
+  results.forEach(r => {
+    const cat = r.category || 'Uncategorised';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(r);
+  });
+
+  rowsEl.innerHTML = Object.entries(byCategory).sort(([a],[b]) => a.localeCompare(b)).map(([cat, items]) => `
+    <div class="stk-category-header">${cat}</div>
+    ${items.map(item => {
+      const up      = item.current_upt !== null && item.calculated_upt > item.current_upt;
+      const colour  = item.is_new ? 'var(--accent3)' : up ? 'var(--danger)' : 'var(--success)';
+      const arrow   = item.is_new ? 'New' : up ? '▲' : '▼';
+      const pctStr  = item.is_new ? 'Not set' : `${up ? '+' : '-'}${(item.pct_change * 100).toFixed(0)}%`;
+      return `
+        <div style="display:grid;grid-template-columns:1fr 80px 80px 100px 100px 100px;gap:10px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--border);"
+          id="stk-upt-row-${item.item_id}">
+          <div>
+            <div style="font-size:13px;font-weight:500;">${item.name}</div>
+            <div style="font-size:11px;color:var(--text3);">consumed ${item.consumed} ${item.unit}</div>
+          </div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text2);">
+            ${item.current_upt != null ? item.current_upt : '<span style="color:var(--text3);">—</span>'}
+          </div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;font-weight:600;color:${colour};">
+            ${item.calculated_upt}
+          </div>
+          <div style="font-size:12px;font-weight:600;color:${colour};">
+            ${arrow} ${pctStr}
+          </div>
+          <div style="font-size:11px;color:var(--text3);">
+            ${fmtDate(item.from_date)} →<br>${fmtDate(item.to_date)}
+          </div>
+          <div style="text-align:right;">
+            <button class="btn btn-accent btn-sm" onclick="uptUpdateSingle('${item.item_id}', ${item.calculated_upt})">
+              Update
+            </button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--text3);" onclick="uptDismissSingle('${item.item_id}')">
+              Keep
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('')}
+  `).join('');
+
+  if (contentEl) contentEl.style.display = 'block';
+}
+
+async function uptUpdateSingle(itemId, calculatedUpt) {
+  const catalogueItem = stockItems.find(i => i.id === itemId);
+  if (!catalogueItem) return;
+  catalogueItem.upt = calculatedUpt;
+  await dbSaveStockItem(catalogueItem);
+
+  // Remove row with a visual fade
+  const row = document.getElementById(`stk-upt-row-${itemId}`);
+  if (row) {
+    row.style.transition = 'opacity .3s';
+    row.style.opacity    = '0';
+    setTimeout(() => { row.remove(); updateUptPendingBanner(); }, 300);
+  }
+  toast(`UPT updated to ${calculatedUpt} ✓`);
+  renderDashUptAlert();
+}
+
+function uptDismissSingle(itemId) {
+  const row = document.getElementById(`stk-upt-row-${itemId}`);
+  if (row) {
+    row.style.transition = 'opacity .3s';
+    row.style.opacity    = '0.3';
+    setTimeout(() => { row.remove(); updateUptPendingBanner(); }, 300);
+  }
+}
+
+function updateUptPendingBanner() {
+  const remaining  = document.querySelectorAll('#stk-upt-tab-rows [id^="stk-upt-row-"]').length;
+  const bannerEl   = document.getElementById('stk-upt-pending-banner');
+  const pendingEl  = document.getElementById('stk-upt-pending-text');
+  if (!bannerEl) return;
+  if (remaining === 0) {
+    bannerEl.style.display = 'none';
+  } else {
+    if (pendingEl) pendingEl.textContent = `${remaining} item${remaining !== 1 ? 's have' : ' has'} a UPT change of more than 5%`;
+  }
+}
+
+async function uptUpdateAll() {
+  const rows = document.querySelectorAll('#stk-upt-tab-rows [id^="stk-upt-row-"]');
+  for (const row of rows) {
+    const itemId  = row.id.replace('stk-upt-row-', '');
+    // Find the calculated UPT from the button's onclick attribute
+    const btn     = row.querySelector('.btn-accent');
+    if (!btn) continue;
+    const match   = btn.getAttribute('onclick')?.match(/uptUpdateSingle\('[^']+',\s*([\d.]+)\)/);
+    if (!match) continue;
+    const calcUpt = parseFloat(match[1]);
+    const item    = stockItems.find(i => i.id === itemId);
+    if (item) { item.upt = calcUpt; await dbSaveStockItem(item); }
+  }
+  toast('All UPT values updated ✓');
+  renderUptReviewTab();
+  renderDashUptAlert();
+}
+
+// ══════════════════════════════════════════════════════
+//  DASHBOARD — SALES SUMMARY + UPT ALERT
+//  Called from renderAll() in app.js
+// ══════════════════════════════════════════════════════
+
+async function renderDashSalesSummary() {
+  const wrapEl = document.getElementById('dash-sales-summary');
+  if (!wrapEl) return;
+  if (typeof dbLoadSalesSummary !== 'function') return;
+
+  const days     = parseInt(document.getElementById('dash-sales-range')?.value || '30');
+  const toDate   = new Date().toISOString().split('T')[0];
+  const fromDate = (() => { const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().split('T')[0]; })();
+
+  const rows = await dbLoadSalesSummary(fromDate, toDate);
+  if (!rows.length) { wrapEl.style.display = 'none'; return; }
+
+  wrapEl.style.display = 'block';
+
+  const totalRevenue  = rows.reduce((s, r) => s + (r.total_revenue || 0), 0);
+  const totalFood     = rows.reduce((s, r) => s + (r.food_revenue || 0), 0);
+  const totalBev      = rows.reduce((s, r) => s + (r.beverage_revenue || 0), 0);
+  const totalOther    = rows.reduce((s, r) => s + (r.other_revenue || 0), 0);
+  const daysWithData  = rows.length;
+  const avgPerDay     = daysWithData > 0 ? totalRevenue / daysWithData : 0;
+  const lastSync      = rows[rows.length - 1]?.date;
+
+  // Sync label
+  const syncEl = document.getElementById('dash-sales-sync-label');
+  if (syncEl) syncEl.textContent = `Last entry: ${lastSync ? fmtDate(lastSync) : '—'} · ${daysWithData} day${daysWithData !== 1 ? 's' : ''} of data`;
+
+  // KPIs
+  const kpiEl = document.getElementById('dash-sales-kpis');
+  if (kpiEl) {
+    kpiEl.innerHTML = `
+      <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value positive">${fmt(totalRevenue)}</div><div class="kpi-sub">last ${days} days</div></div>
+      <div class="kpi"><div class="kpi-label">Avg Per Day</div><div class="kpi-value">${fmt(avgPerDay)}</div><div class="kpi-sub">${daysWithData} trading days</div></div>
+      ${totalFood > 0    ? `<div class="kpi"><div class="kpi-label">Food</div><div class="kpi-value">${fmt(totalFood)}</div><div class="kpi-sub">${totalRevenue > 0 ? Math.round((totalFood/totalRevenue)*100) : 0}% of total</div></div>` : ''}
+      ${totalBev > 0     ? `<div class="kpi"><div class="kpi-label">Beverage</div><div class="kpi-value">${fmt(totalBev)}</div><div class="kpi-sub">${totalRevenue > 0 ? Math.round((totalBev/totalRevenue)*100) : 0}% of total</div></div>` : ''}
+    `;
+  }
+
+  // Bar chart — one bar per day, last 14 days max for readability
+  const chartEl = document.getElementById('dash-sales-chart');
+  if (chartEl) {
+    const chartRows = rows.slice(-14);
+    const maxVal    = Math.max(...chartRows.map(r => r.total_revenue || 0), 1);
+    chartEl.innerHTML = `
+      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:4px;">
+        ${chartRows.map(r => {
+          const h   = Math.max(4, Math.round(((r.total_revenue || 0) / maxVal) * 76));
+          const d   = new Date(r.date);
+          const lbl = d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+          return `
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;" title="${lbl}: ${fmt(r.total_revenue || 0)}">
+              <div style="width:100%;height:${h}px;background:var(--accent);border-radius:3px 3px 0 0;opacity:.85;"></div>
+              <div style="font-size:9px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-align:center;">${lbl}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // Breakdown table if food/bev data exists
+  const breakdownEl = document.getElementById('dash-sales-breakdown');
+  if (breakdownEl && (totalFood > 0 || totalBev > 0 || totalOther > 0)) {
+    breakdownEl.innerHTML = `
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;">Revenue Breakdown</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        ${totalFood  > 0 ? `<div style="padding:12px;background:var(--surface2);border-radius:8px;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Food</div><div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${fmt(totalFood)}</div></div>` : ''}
+        ${totalBev   > 0 ? `<div style="padding:12px;background:var(--surface2);border-radius:8px;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Beverage</div><div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${fmt(totalBev)}</div></div>` : ''}
+        ${totalOther > 0 ? `<div style="padding:12px;background:var(--surface2);border-radius:8px;"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Other</div><div style="font-size:16px;font-weight:600;font-family:'DM Mono',monospace;">${fmt(totalOther)}</div></div>` : ''}
+      </div>
+    `;
+  } else if (breakdownEl) {
+    breakdownEl.innerHTML = '';
+  }
+}
+
+async function renderDashUptAlert() {
+  const wrapEl = document.getElementById('dash-upt-alert');
+  if (!wrapEl) return;
+
+  const calc = await calcUptForAllItems();
+  if (!calc || !calc.results.length) { wrapEl.style.display = 'none'; return; }
+
+  const { results } = calc;
+  wrapEl.style.display = 'block';
+
+  const subtitleEl = document.getElementById('dash-upt-alert-subtitle');
+  if (subtitleEl) subtitleEl.textContent = `${results.length} item${results.length !== 1 ? 's have' : ' has'} a UPT change — review and update in Stocktake`;
+
+  const rowsEl = document.getElementById('dash-upt-alert-rows');
+  if (!rowsEl) return;
+
+  // Show first 5 items — "Review UPT" button takes to full list
+  const shown = results.slice(0, 5);
+  rowsEl.innerHTML = shown.map(item => {
+    const up     = item.current_upt !== null && item.calculated_upt > item.current_upt;
+    const colour = item.is_new ? 'var(--accent3)' : up ? 'var(--danger)' : 'var(--success)';
+    const arrow  = item.is_new ? 'New' : up ? '▲' : '▼';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);gap:12px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:500;">${item.name}</div>
+          <div style="font-size:11px;color:var(--text3);">${item.category}</div>
+        </div>
+        <div style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text2);">
+          ${item.current_upt != null ? item.current_upt : '—'}
+        </div>
+        <div style="font-size:12px;color:var(--text3);">→</div>
+        <div style="font-size:13px;font-family:'DM Mono',monospace;font-weight:600;color:${colour};">
+          ${arrow} ${item.calculated_upt}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (results.length > 5) {
+    rowsEl.innerHTML += `
+      <div style="padding:10px 20px;font-size:12px;color:var(--text3);text-align:center;">
+        +${results.length - 5} more — click Review UPT to see all
+      </div>
+    `;
+  }
 }
