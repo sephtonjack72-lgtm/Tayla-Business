@@ -378,6 +378,7 @@ function openSupplierModal(id) {
   document.getElementById('stk-supplier-notes').value     = s?.notes   || '';
   document.getElementById('stk-supplier-lead-time').value = s?.lead_time_days ?? '';
   document.getElementById('stk-supplier-terms').value     = s?.payment_terms || '';
+  document.getElementById('stk-supplier-portal').value    = s?.order_portal_url || '';
   document.getElementById('stk-supplier-modal').classList.add('show');
   document.getElementById('stk-supplier-name').focus();
 }
@@ -401,8 +402,9 @@ async function saveSupplier() {
     phone:          phone   || null,
     email:          email   || null,
     notes:          notes   || null,
-    lead_time_days: leadRaw !== '' ? parseInt(leadRaw, 10) : null,
-    payment_terms:  terms   || null,
+    lead_time_days:   leadRaw !== '' ? parseInt(leadRaw, 10) : null,
+    payment_terms:    terms   || null,
+    order_portal_url: document.getElementById('stk-supplier-portal')?.value.trim() || null,
     created_at:     editId ? undefined : new Date().toISOString(),
   };
   if (!editId) delete supplier.created_at;
@@ -431,6 +433,10 @@ function renderSuppliersList() {
             ${itemCount > 0 ? `<span style="margin-left:6px;">· ${itemCount} item${itemCount !== 1 ? 's' : ''}</span>` : ''}
           </div>
           ${s.notes ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;font-style:italic;">${s.notes}</div>` : ''}
+          ${s.order_portal_url ? `<a href="${s.order_portal_url}" target="_blank" rel="noopener" style="font-size:11px;color:var(--accent3);margin-top:2px;display:inline-flex;align-items:center;gap:4px;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Order Portal
+          </a>` : ''}
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0;">
           <button class="btn btn-ghost btn-sm" style="color:var(--text);font-size:11px;" onclick="openSupplierModal('${s.id}')">Edit</button>
