@@ -362,23 +362,36 @@ async function removeMember(memberId) {
 
 // Accept invite — called when an invited user logs in
 async function checkPendingInvites() {
-  if (!_currentUser?.email) return false;
-  const { data: pending } = await _supabase
+  if (!_currentUser?.id) return false;
+
+  // First: activate any invites already matched to this user_id
+  const { data: byUserId } = await _supabase
     .from('business_members')
     .select('*')
-    .eq('email', _currentUser.email)
+    .eq('user_id', _currentUser.id)
     .eq('status', 'pending');
 
-  if (!pending?.length) return false;
-
-  // Activate pending invites for this user
-  for (const invite of pending) {
-    await _supabase.from('business_members')
-      .update({ status: 'active', user_id: _currentUser.id })
-      .eq('id', invite.id);
+  if (byUserId?.length) {
+    for (const invite of byUserId) {
+      await _supabase.from('business_members')
+        .update({ status: 'active' })
+        .eq('id', invite.id);
+    }
+    return true;
   }
 
-  return true; // signals that invites were activated
+  // Second: claim any pending invites matching this user's email
+  // We do this via update (not select) since UPDATE policy allows user_id match
+  // The invite row has user_id = null until claimed, so we match on email via RPC
+  if (_currentUser?.email) {
+    const { data: claimed } = await _supabase.rpc('claim_pending_invites', {
+      p_email:   _currentUser.email,
+      p_user_id: _currentUser.id,
+    });
+    return !!(claimed && claimed > 0);
+  }
+
+  return false;
 }
 
 // ══════════════════════════════════════════════════════
