@@ -1648,7 +1648,7 @@ async function emailPOToSupplier(poId) {
     const token = session?.access_token;
 
     const res = await fetch(
-      `https://whedwekxzjfqwjuoarid.supabase.co/functions/v1/send-po-email`,
+      `https://vyikolyljzygmxiahcul.supabase.co/functions/v1/send-po-email`,
       {
         method: 'POST',
         headers: {
