@@ -725,48 +725,71 @@ function openVarianceReasonModal() {
   document.getElementById('stk-variance-modal').classList.add('show');
 }
 
-async function finaliseStocktake() {
+async function finaliseStocktake(applyUpt) {
   if (!_activeSession) return;
 
-  // Collect variance reasons from modal (if open)
-  const reasonSelects = document.querySelectorAll('#stk-variance-reason-rows select[data-item-id]');
-  let allReasonsSet = true;
-  reasonSelects.forEach(sel => {
-    if (!sel.value) { allReasonsSet = false; return; }
-    const item = _activeSession.items.find(i => i.item_id === sel.dataset.itemId);
-    if (item) item.variance_reason = sel.value;
-  });
+  // ── Step 1: collect variance reasons (only runs on first call, not UPT skip)
+  if (applyUpt === undefined) {
+    const reasonSelects = document.querySelectorAll('#stk-variance-reason-rows select[data-item-id]');
+    let allReasonsSet = true;
+    reasonSelects.forEach(sel => {
+      if (!sel.value) { allReasonsSet = false; return; }
+      const item = _activeSession.items.find(i => i.item_id === sel.dataset.itemId);
+      if (item) item.variance_reason = sel.value;
+    });
 
-  if (!allReasonsSet) {
-    const errEl = document.getElementById('stk-variance-modal-error');
-    if (errEl) { errEl.textContent = 'Please select a reason for all negative variances.'; errEl.style.display = 'block'; }
-    return;
+    if (!allReasonsSet) {
+      const errEl = document.getElementById('stk-variance-modal-error');
+      if (errEl) { errEl.textContent = 'Please select a reason for all negative variances.'; errEl.style.display = 'block'; }
+      return;
+    }
+
+    closeModal('stk-variance-modal');
+
+    // ── Step 2: Calculate UPT from Workforce sales data (if available)
+    const didShowUpt = await openUptReviewModal();
+    if (didShowUpt) return; // UPT modal will call finaliseStocktake(true/false) when done
+    // Fall through if no sales data — complete immediately
   }
 
-  closeModal('stk-variance-modal');
+  // ── Step 3: Apply selected UPT updates (if coming from UPT modal)
+  if (applyUpt === true) {
+    closeModal('stk-upt-modal');
+    document.querySelectorAll('#stk-upt-rows .stk-upt-row').forEach(row => {
+      const checkbox = row.querySelector('input[type=checkbox]');
+      if (!checkbox?.checked) return;
+      const itemId      = row.dataset.itemId;
+      const calcUpt     = parseFloat(row.dataset.calcUpt);
+      const catalogueItem = stockItems.find(i => i.id === itemId);
+      if (catalogueItem && !isNaN(calcUpt)) {
+        catalogueItem.upt = calcUpt;
+        dbSaveStockItem(catalogueItem);
+      }
+    });
+  } else if (applyUpt === false) {
+    closeModal('stk-upt-modal');
+  }
 
-  // Recalculate all variances — counted vs on_hand (not par)
+  // ── Step 4: Recalculate variances — counted vs on_hand
   const items = _activeSession.items || [];
   items.forEach(item => {
     if (item.count !== null) {
-      // Variance = what was physically found minus what we expected to be there
       const baseline = item.on_hand ?? null;
       item.variance  = baseline !== null ? +(item.count - baseline).toFixed(3) : null;
     }
   });
 
-  // Post journal entries (uses variance for loss calculation)
+  // ── Step 5: Post journal entries
   const journalIds = await postStocktakeJournals(_activeSession);
 
-  // Finalise session
+  // ── Step 6: Finalise session
   _activeSession.status       = 'submitted';
   _activeSession.submitted_at = new Date().toISOString();
   _activeSession.journal_ids  = journalIds;
 
   await dbSaveStocktakeSession(_activeSession);
 
-  // Hard-reset on_hand for every counted item to the physical count
-  // This is the ground-truth reconcile: what was found IS the new on_hand
+  // ── Step 7: Hard-reset on_hand to physical count for each counted item
   for (const sessionItem of items) {
     if (sessionItem.count === null) continue;
     const catalogueItem = stockItems.find(i => i.id === sessionItem.item_id);
@@ -775,24 +798,14 @@ async function finaliseStocktake() {
     await dbSaveStockItem(catalogueItem);
   }
 
-  // Finalise session
-  _activeSession.status       = 'submitted';
-  _activeSession.submitted_at = new Date().toISOString();
-  _activeSession.journal_ids  = journalIds;
-
-  await dbSaveStocktakeSession(_activeSession);
-
-  // Update the journals in app state
   if (typeof renderAll === 'function') renderAll();
 
-  const session   = _activeSession;
-  _activeSession  = null;
+  const session  = _activeSession;
+  _activeSession = null;
 
-  // Reset new count tab label
   const newcountTab = document.getElementById('stktab-newcount');
   if (newcountTab) newcountTab.textContent = 'New Count';
 
-  // Reset start form
   const dateEl  = document.getElementById('stk-session-date');
   const staffEl = document.getElementById('stk-session-staff');
   const notesEl = document.getElementById('stk-session-notes');
@@ -805,6 +818,139 @@ async function finaliseStocktake() {
 
   showStocktakeTab('history');
   toast('Stocktake submitted ✓ Journals posted');
+}
+
+// ══════════════════════════════════════════════════════
+//  UPT REVIEW MODAL
+//  Queries sales_summary for the period between the
+//  previous submitted stocktake and this one, then
+//  calculates actual UPT per item from:
+//    units_consumed = opening_on_hand + received_since - closing_count
+//    actual_upt     = units_consumed / (total_revenue / 1000)
+// ══════════════════════════════════════════════════════
+
+async function openUptReviewModal() {
+  // Need sales data loader from Business app.js
+  if (typeof dbLoadSalesSummary !== 'function') return false;
+
+  // Find previous submitted session to get the period start date
+  const submitted  = stocktakeSessions.filter(s => s.status === 'submitted');
+  const prevSession = submitted[0] || null; // most recent (sessions are newest-first)
+  const fromDate   = prevSession ? prevSession.date : null;
+  const toDate     = _activeSession.date;
+
+  if (!fromDate) return false; // first ever stocktake — no period to calculate from
+
+  // Load sales for the period
+  const salesRows = await dbLoadSalesSummary(fromDate, toDate);
+  if (!salesRows.length) return false; // no Workforce sales data linked
+
+  const totalRevenue = salesRows.reduce((s, r) => s + (r.total_revenue || 0), 0);
+  if (totalRevenue <= 0) return false;
+
+  // Get received quantities per item from POs during the period
+  const poReceipts = (typeof purchaseOrders !== 'undefined' ? purchaseOrders : [])
+    .filter(po => po.status !== 'voided' && po.date >= fromDate && po.date <= toDate);
+
+  // Calculate consumed and UPT per item
+  const uptCalcs = [];
+  for (const sessionItem of (_activeSession.items || [])) {
+    if (sessionItem.count === null) continue;
+
+    // Units received since last stocktake for this item
+    let received = 0;
+    for (const po of poReceipts) {
+      for (const receipt of (po.receipts || [])) {
+        for (const rl of (receipt.lines || [])) {
+          const catalogueItem = stockItems.find(i => i.id === sessionItem.item_id);
+          if (
+            (rl.stock_item_id && rl.stock_item_id === sessionItem.item_id) ||
+            (!rl.stock_item_id && rl.description?.toLowerCase() === sessionItem.name?.toLowerCase())
+          ) {
+            received += rl.qty_received || 0;
+          }
+        }
+      }
+    }
+
+    const opening  = sessionItem.on_hand ?? 0;
+    const closing  = sessionItem.count;
+    const consumed = +(opening + received - closing).toFixed(3);
+    if (consumed <= 0) continue; // nothing consumed — skip
+
+    const calculatedUpt = +(consumed / (totalRevenue / 1000)).toFixed(3);
+    const catalogueItem = stockItems.find(i => i.id === sessionItem.item_id);
+    const currentUpt    = catalogueItem?.upt ?? null;
+
+    // Only show items where UPT has changed meaningfully (>5% difference) or is new
+    const isNew     = currentUpt === null;
+    const changed   = currentUpt !== null && Math.abs(calculatedUpt - currentUpt) / Math.max(currentUpt, 0.001) > 0.05;
+    if (!isNew && !changed) continue;
+
+    uptCalcs.push({
+      item_id:        sessionItem.item_id,
+      name:           sessionItem.name,
+      category:       sessionItem.category,
+      unit:           sessionItem.unit,
+      current_upt:    currentUpt,
+      calculated_upt: calculatedUpt,
+      consumed,
+      received,
+      is_new:         isNew,
+    });
+  }
+
+  if (!uptCalcs.length) return false; // no meaningful UPT changes
+
+  // Populate the modal
+  const salesSummaryEl = document.getElementById('stk-upt-sales-summary');
+  if (salesSummaryEl) {
+    salesSummaryEl.innerHTML = `
+      Period: ${fromDate} → ${toDate} &nbsp;·&nbsp;
+      Total revenue: <strong>$${totalRevenue.toLocaleString('en-AU', {minimumFractionDigits:0, maximumFractionDigits:0})}</strong> &nbsp;·&nbsp;
+      ${salesRows.length} day${salesRows.length !== 1 ? 's' : ''} of sales data from Tayla Workforce
+    `;
+  }
+
+  const rowsEl = document.getElementById('stk-upt-rows');
+  if (rowsEl) {
+    rowsEl.innerHTML = uptCalcs.map(c => {
+      const direction = c.current_upt !== null
+        ? (c.calculated_upt > c.current_upt ? '▲' : '▼')
+        : '';
+      const colour = c.current_upt !== null
+        ? (c.calculated_upt > c.current_upt ? 'var(--danger)' : 'var(--success)')
+        : 'var(--accent3)';
+      return `
+        <div class="stk-upt-row" data-item-id="${c.item_id}" data-calc-upt="${c.calculated_upt}"
+          style="display:grid;grid-template-columns:1fr 90px 90px 80px;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <div style="font-size:13px;font-weight:500;">${c.name}</div>
+            <div style="font-size:11px;color:var(--text3);">${c.category} · consumed ${c.consumed} ${c.unit || 'units'}</div>
+          </div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;color:var(--text2);">
+            ${c.current_upt != null ? c.current_upt : '<span style="color:var(--text3);">Not set</span>'}
+          </div>
+          <div style="font-size:13px;font-family:'DM Mono',monospace;font-weight:600;color:${colour};">
+            ${direction} ${c.calculated_upt}
+          </div>
+          <div style="text-align:center;">
+            <input type="checkbox" checked
+              style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent);">
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  document.getElementById('stk-upt-modal').classList.add('show');
+  return true;
+}
+
+function stkUptSelectAll(checked) {
+  document.querySelectorAll('#stk-upt-rows .stk-upt-row input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+  });
 }
 
 // ══════════════════════════════════════════════════════
