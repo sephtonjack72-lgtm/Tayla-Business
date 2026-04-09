@@ -581,6 +581,51 @@ async function linkFranchise() {
     .update({ linked_business_id: newBiz.id })
     .eq('id', wfBizId);
 
+  // ── Sync Workforce users to Business members
+  // Fetch all active users on this franchise from Workforce
+  const { data: wfUsers } = await wf
+    .from('business_users')
+    .select('user_id, email, role')
+    .eq('business_id', wfBizId)
+    .eq('status', 'active');
+
+  // Role mapping: Workforce → Business
+  const roleMap = {
+    owner:           'admin',    // franchise owner gets admin in Business
+    franchise:       'admin',    // franchise role → admin
+    manager:         'manager',  // manager → manager (Full Access set)
+    payroll_officer: null,       // payroll-only, no Business access
+  };
+
+  if (wfUsers?.length) {
+    const membersToInsert = wfUsers
+      .map(u => {
+        const bizRole = roleMap[u.role];
+        if (!bizRole) return null; // skip payroll_officer
+        return {
+          id:             uid(),
+          business_id:    newBiz.id,
+          user_id:        u.user_id || null,
+          email:          u.email,
+          role:           bizRole,
+          permission_set: bizRole === 'manager' ? 'full_access' : null,
+          status:         u.user_id ? 'active' : 'pending',
+          invited_by:     _currentUser.id,
+          created_at:     new Date().toISOString(),
+        };
+      })
+      .filter(Boolean);
+
+    if (membersToInsert.length) {
+      const { error: memberErr } = await _supabase
+        .from('business_members')
+        .insert(membersToInsert);
+      if (memberErr) console.warn('Member sync partial error:', memberErr.message);
+    }
+  }
+
+  const syncCount = (wfUsers || []).filter(u => roleMap[u.role]).length;
+
   // Add this franchise to _allBusinesses for the switcher
   _allBusinesses.push({ ...newBiz, _role: 'owner' });
   renderBizSwitcher();
@@ -592,7 +637,7 @@ async function linkFranchise() {
   delete statusEl.dataset.wfBizName;
 
   await loadFranchises();
-  toast(`${wfBizName} linked as a franchise ✓`);
+  toast(`${wfBizName} linked ✓${syncCount ? ` · ${syncCount} Workforce user${syncCount !== 1 ? 's' : ''} synced` : ''}`);
 }
 
 async function loadFranchises() {
@@ -614,13 +659,89 @@ async function loadFranchises() {
   }
 
   el.innerHTML = data.map(f => `
-    <div style="display:grid;grid-template-columns:1fr 120px 100px;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);">
-      <div>
-        <div style="font-size:13px;font-weight:600;">${f.biz_name}</div>
-        <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN ' + f.abn + ' · ' : ''}Code: <span style="font-family:monospace;">${f.connector_code}</span></div>
+    <div style="padding:12px 0;border-bottom:1px solid var(--border);">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:8px;">
+        <div>
+          <div style="font-size:13px;font-weight:600;">${f.biz_name}</div>
+          <div style="font-size:11px;color:var(--text3);">${f.abn ? 'ABN ' + f.abn + ' · ' : ''}Code: <span style="font-family:monospace;">${f.connector_code}</span></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:12px;color:var(--success);">✓ Linked</span>
+          <button class="btn btn-ghost btn-sm" onclick="syncFranchiseUsers('${f.id}','${f.connector_code}')" title="Re-sync users from Workforce">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Sync Users
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="switchBusiness('${f.id}')">View Branch</button>
+        </div>
       </div>
-      <div style="font-size:12px;color:var(--success);">✓ Linked</div>
-      <button class="btn btn-ghost btn-sm" onclick="switchBusiness('${f.id}')">View Branch</button>
     </div>
   `).join('');
+}
+
+// Re-sync Workforce users to a franchise Business account
+// Called manually when new users are added to the franchise in Workforce after initial link
+async function syncFranchiseUsers(bizId, connectorCode) {
+  const wf = getWfSupabase();
+
+  // Find the Workforce business by connector code
+  const { data: wfBiz } = await wf
+    .from('businesses')
+    .select('id')
+    .eq('business_connector_code', connectorCode)
+    .maybeSingle();
+
+  if (!wfBiz) { toast('Could not find matching Workforce franchise'); return; }
+
+  // Fetch all active Workforce users for this franchise
+  const { data: wfUsers } = await wf
+    .from('business_users')
+    .select('user_id, email, role')
+    .eq('business_id', wfBiz.id)
+    .eq('status', 'active');
+
+  if (!wfUsers?.length) { toast('No active users found in Workforce for this franchise'); return; }
+
+  const roleMap = {
+    owner:           'admin',
+    franchise:       'admin',
+    manager:         'manager',
+    payroll_officer: null,
+  };
+
+  // Get existing Business members for this franchise to avoid duplicates
+  const { data: existing } = await _supabase
+    .from('business_members')
+    .select('email')
+    .eq('business_id', bizId);
+
+  const existingEmails = new Set((existing || []).map(m => m.email));
+
+  const toInsert = wfUsers
+    .map(u => {
+      const bizRole = roleMap[u.role];
+      if (!bizRole) return null;
+      if (existingEmails.has(u.email)) return null; // already synced
+      return {
+        id:             uid(),
+        business_id:    bizId,
+        user_id:        u.user_id || null,
+        email:          u.email,
+        role:           bizRole,
+        permission_set: bizRole === 'manager' ? 'full_access' : null,
+        status:         u.user_id ? 'active' : 'pending',
+        invited_by:     _currentUser.id,
+        created_at:     new Date().toISOString(),
+      };
+    })
+    .filter(Boolean);
+
+  if (!toInsert.length) {
+    toast('All Workforce users are already synced');
+    return;
+  }
+
+  const { error } = await _supabase.from('business_members').insert(toInsert);
+  if (error) { toast('Sync failed: ' + error.message); return; }
+
+  toast(`${toInsert.length} user${toInsert.length !== 1 ? 's' : ''} synced from Workforce ✓`);
 }
