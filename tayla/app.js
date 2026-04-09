@@ -3850,6 +3850,21 @@ function submitInviteMember() {
   if (typeof inviteMember === 'function') inviteMember();
 }
 
+// ══════════════════════════════════════════════════════
+//  SETUP WIZARD CANCEL
+// ══════════════════════════════════════════════════════
+
+function cancelSetupWizard() {
+  if (!confirm('Go back to the app? Any progress on this new business setup will be lost.')) return;
+  document.getElementById('setup-overlay').style.display = 'none';
+  // Close the biz switcher menu if open
+  const menu = document.getElementById('biz-switcher-menu');
+  if (menu) menu.style.display = 'none';
+  // Hide cancel button again
+  const cancelBtn = document.getElementById('setup-cancel-btn');
+  if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
 function fmt(n) {
   if (n === 0) return '$0.00';
   const abs = Math.abs(n);
