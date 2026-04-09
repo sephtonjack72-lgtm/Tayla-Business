@@ -3918,30 +3918,21 @@ async function loadFranchisePnL(businessId, fyVal) {
   const fyStart = `${fy - 1}-07-01`;
   const fyEnd   = `${fy}-06-30`;
 
-  // Load transactions for this business in the FY range
-  const [txRes, jnlRes] = await Promise.all([
-    _supabase.from('transactions')
-      .select('type, amount, date, debits, credits, category')
-      .eq('business_id', businessId)
-      .gte('date', fyStart).lte('date', fyEnd),
-    _supabase.from('journals')
-      .select('date, lines')
-      .eq('business_id', businessId)
-      .gte('date', fyStart).lte('date', fyEnd),
-  ]);
+  // All P&L data is in transactions (journals are stored as type='journal' rows in transactions)
+  const { data: txns } = await _supabase.from('transactions')
+    .select('type, amount, date, debits, credits, category')
+    .eq('business_id', businessId)
+    .gte('date', fyStart).lte('date', fyEnd);
 
-  const txns = txRes.data || [];
-  const jnls = jnlRes.data || [];
+  const txnList = txns || [];
 
-  // Calculate revenue and expenses using same logic as totals()
   let revenue  = 0;
   let expenses = 0;
 
-  // Revenue accounts = 4xxx (credit-normal), expense = 5xxx (debit-normal)
   const revPrefixes = ['4'];
   const expPrefixes = ['5'];
 
-  txns.forEach(t => {
+  txnList.forEach(t => {
     if (t.type === 'journal' && t.debits && t.credits) {
       const debits  = typeof t.debits  === 'string' ? JSON.parse(t.debits)  : (t.debits  || []);
       const credits = typeof t.credits === 'string' ? JSON.parse(t.credits) : (t.credits || []);
@@ -3949,15 +3940,6 @@ async function loadFranchisePnL(businessId, fyVal) {
       debits.forEach(d  => { if (expPrefixes.some(p => String(d.account).startsWith(p))) expenses += d.amount; });
     } else if (t.type === 'income')  { revenue  += t.amount; }
       else if (t.type === 'expense') { expenses += t.amount; }
-  });
-
-  jnls.forEach(j => {
-    const lines = typeof j.lines === 'string' ? JSON.parse(j.lines) : (j.lines || []);
-    lines.forEach(l => {
-      const acc = String(l.accountId || l.account || '');
-      if (revPrefixes.some(p => acc.startsWith(p)) && l.credit > 0) revenue  += l.credit;
-      if (expPrefixes.some(p => acc.startsWith(p)) && l.debit  > 0) expenses += l.debit;
-    });
   });
 
   const result = { revenue, expenses, netProfit: revenue - expenses, businessId, fyVal };
