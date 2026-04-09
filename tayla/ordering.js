@@ -792,6 +792,7 @@ function viewPO(id) {
   const canReceive = ['sent','partial'].includes(po.status);
   const canReturn  = ['partial','received'].includes(po.status);
   const canVoid    = ['draft','sent'].includes(po.status);
+  const hasPortal  = !!(supplier?.order_portal_url);
 
   const show = (id, visible) => {
     const el = document.getElementById(id);
@@ -800,6 +801,7 @@ function viewPO(id) {
   show('ord-detail-edit-btn',    canEdit);
   show('ord-detail-send-btn',    canSend);
   show('ord-detail-email-btn',   canEmail);
+  show('ord-detail-portal-btn',  hasPortal);
   show('ord-detail-receive-btn', canReceive);
   show('ord-detail-return-btn',  canReturn);
   show('ord-detail-void-btn',    canVoid);
@@ -817,6 +819,19 @@ async function voidPO(id) {
   renderPOList();
   renderOrdKpis();
   toast(`PO ${po.po_number} voided`);
+}
+
+// Open supplier's online ordering portal in a new tab
+function openSupplierPortal(supplierId) {
+  const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
+  if (!supplier?.order_portal_url) {
+    toast('No order portal URL set for this supplier — add one in the supplier profile');
+    return;
+  }
+  // Ensure URL has a protocol
+  let url = supplier.order_portal_url.trim();
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  window.open(url, '_blank', 'noopener');
 }
 
 // Mark a draft PO as sent directly from the detail modal
