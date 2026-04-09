@@ -1892,12 +1892,15 @@ function renderAll() {
   renderTransactions();
   renderJournals();
   renderLedger();
-  renderIncomeStatement();  // Now uses double-entry data
-  renderBalanceSheet();     // Now uses double-entry data
+  renderIncomeStatement();
+  renderBalanceSheet();
   renderGST();
   renderAssets();
   renderUsersTable();
   renderTax();
+  // Workforce-linked dashboard cards (async, run in background)
+  if (typeof renderDashSalesSummary === 'function') renderDashSalesSummary();
+  if (typeof renderDashUptAlert     === 'function') renderDashUptAlert();
 }
 
 
