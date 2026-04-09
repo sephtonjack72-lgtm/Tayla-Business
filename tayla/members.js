@@ -188,9 +188,11 @@ function addNewBusiness() {
   document.getElementById('biz-switcher-menu').style.display = 'none';
   initSetupWizard();
   showOverlay('setup');
-  // Show the cancel/back button since user is adding a new business (not first-time setup)
-  const cancelBtn = document.getElementById('setup-cancel-btn');
-  if (cancelBtn) cancelBtn.style.display = 'block';
+  // Show cancel button after overlay renders — user is adding a new business, not first-time setup
+  setTimeout(() => {
+    const cancelBtn = document.getElementById('setup-cancel-btn');
+    if (cancelBtn) cancelBtn.style.display = 'block';
+  }, 50);
   // Override save to insert new business (not update)
   document.getElementById('setup-save-btn').onclick = saveNewBusinessFromWizard;
 }
