@@ -506,30 +506,44 @@ async function testFranchiseCode() {
   statusEl.style.color = 'var(--text3)';
   statusEl.textContent = 'Validating…';
 
-  const wf = getWfSupabase();
-  const { data, error } = await wf
-    .from('businesses')
-    .select('id, biz_name, abn, business_connector_code, parent_business_id')
-    .eq('business_connector_code', code)
-    .maybeSingle();
+  try {
+    const wf = getWfSupabase();
+    const { data, error } = await wf
+      .from('businesses')
+      .select('id, biz_name, abn, business_connector_code, parent_business_id')
+      .eq('business_connector_code', code)
+      .maybeSingle();
 
-  if (error || !data) {
+    if (error) {
+      console.error('Franchise code lookup error:', error);
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = `✕ Lookup failed (${error.code || error.message}) — the Workforce database may need a policy update. Contact support.`;
+      return;
+    }
+
+    if (!data) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = '✕ Code not found — check you copied it correctly from Tayla Workforce → Business Settings → Franchise list';
+      return;
+    }
+
+    if (!data.parent_business_id) {
+      statusEl.style.color = 'var(--danger)';
+      statusEl.textContent = '✕ This code belongs to a root business, not a franchise — only franchise branches can be linked';
+      return;
+    }
+
+    statusEl.style.color = 'var(--success)';
+    statusEl.textContent = `✓ Found "${data.biz_name}" — click Link Franchise to connect`;
+    statusEl.dataset.wfBizId   = data.id;
+    statusEl.dataset.wfBizName = data.biz_name;
+    statusEl.dataset.wfAbn     = data.abn || '';
+
+  } catch (e) {
+    console.error('testFranchiseCode exception:', e);
     statusEl.style.color = 'var(--danger)';
-    statusEl.textContent = '✕ Code not found — check you copied it correctly from Tayla Workforce';
-    return;
+    statusEl.textContent = '✕ Connection failed — check your internet connection';
   }
-
-  if (!data.parent_business_id) {
-    statusEl.style.color = 'var(--danger)';
-    statusEl.textContent = '✕ This code belongs to a root business, not a franchise — franchises must have a parent set in Workforce';
-    return;
-  }
-
-  statusEl.style.color = 'var(--success)';
-  statusEl.textContent = `✓ Found "${data.biz_name}" — click Link Franchise to connect`;
-  statusEl.dataset.wfBizId   = data.id;
-  statusEl.dataset.wfBizName = data.biz_name;
-  statusEl.dataset.wfAbn     = data.abn || '';
 }
 
 async function linkFranchise() {
