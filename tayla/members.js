@@ -136,15 +136,16 @@ function renderBizSwitcher() {
         <div onclick="switchBusiness('${b.id}')" style="
           padding:11px 16px;font-size:13px;cursor:pointer;
           display:flex;align-items:center;justify-content:space-between;gap:12px;
-          background:${isActive ? 'var(--surface2)' : ''};
-          border-bottom:1px solid var(--border);
-        " onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='${isActive ? 'var(--surface2)' : ''}' ">
+          background:${isActive ? '#3a3a4a' : 'transparent'};
+          border-bottom:1px solid #444455;
+          color:#e8e8f0;
+        " onmouseover="this.style.background='#3a3a4a'" onmouseout="this.style.background='${isActive ? '#3a3a4a' : 'transparent'}'">
           <div style="min-width:0;">
-            <div style="font-weight:${isActive ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <div style="font-weight:${isActive ? '600' : '400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e8e8f0;">
               ${b.biz_name || 'Unnamed Business'}
             </div>
           </div>
-          <span style="font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0;">${roleLabel}</span>
+          <span style="font-size:11px;color:#9f9fba;white-space:nowrap;flex-shrink:0;">${roleLabel}</span>
         </div>
       `;
     }).join('');
@@ -187,6 +188,9 @@ function addNewBusiness() {
   document.getElementById('biz-switcher-menu').style.display = 'none';
   initSetupWizard();
   showOverlay('setup');
+  // Show the cancel/back button since user is adding a new business (not first-time setup)
+  const cancelBtn = document.getElementById('setup-cancel-btn');
+  if (cancelBtn) cancelBtn.style.display = 'block';
   // Override save to insert new business (not update)
   document.getElementById('setup-save-btn').onclick = saveNewBusinessFromWizard;
 }
