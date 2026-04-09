@@ -3545,6 +3545,9 @@ function updateStocktakeNavVisibility(bizType) {
   if (stkTab) stkTab.style.display = allowed.includes(bizType) ? '' : 'none';
   const ordTab = document.getElementById('nav-ordering-tab');
   if (ordTab) ordTab.style.display = allowed.includes(bizType) ? '' : 'none';
+  // Users report — SaaS only
+  const usersItem = document.getElementById('reports-users-item');
+  if (usersItem) usersItem.style.display = bizType === 'saas' ? '' : 'none';
 }
 
 function toggleUserMenu() {
