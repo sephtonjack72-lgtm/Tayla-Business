@@ -82,7 +82,12 @@ async function dbLoadAll() {
 
     const journalsData = (jRes.data || []).map(j => ({
       ...j,
-      lines: j.journal_lines || [],
+      lines: (j.journal_lines || []).map(l => ({
+        ...l,
+        // Normalise snake_case columns from Edge Function inserts to camelCase
+        accountId:   l.accountId   || l.account_id   || '',
+        accountName: l.accountName || l.account_name || '',
+      })),
     }));
 
     const softwareData = (swRes.data || []).map(sw => {
