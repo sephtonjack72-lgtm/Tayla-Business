@@ -1104,13 +1104,13 @@
     <div class="card-body">
       <div style="padding:12px 16px;background:var(--surface2);border-radius:10px;font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.7;">
         <strong>Default behaviour</strong> — emails are sent from
-        <span style="font-family:'DM Mono',monospace;">noreply@usetayla.com.au</span>
+        <span style="font-family:'DM Mono',monospace;"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="84eaebf6e1f4e8fdc4f1f7e1f0e5fde8e5aae7ebe9aae5f1">[email&#160;protected]</a></span>
         with your business email set as the reply-to address. Suppliers can reply directly to you.
         <br><br>
         <strong>Custom sending address</strong> — if you want emails to come from your own domain
-        (e.g. <span style="font-family:'DM Mono',monospace;">orders@yourvenue.com.au</span>),
+        (e.g. <span style="font-family:'DM Mono',monospace;"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="c8a7baacadbabb88b1a7bdbabeada6bdade6aba7a5e6a9bd">[email&#160;protected]</a></span>),
         enter it below. You will need to verify your domain with Resend — contact
-        <a href="mailto:support@usetayla.com.au" style="color:var(--accent3);">support@usetayla.com.au</a>
+        <a href="/cdn-cgi/l/email-protection#a8dbddd8d8c7dadce8dddbcddcc9d1c4c986cbc7c586c9dd" style="color:var(--accent3);"><span class="__cf_email__" data-cfemail="73000603031c01073306001607120a1f125d101c1e5d1206">[email&#160;protected]</span></a>
         to get set up.
       </div>
       <div class="form-grid">
@@ -1443,7 +1443,17 @@
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:4px;">Share this with your Workforce account to enable the link.</div>
       </div>
-      <div id="settings-biz-id-status" style="display:none;margin-top:8px;padding:8px 14px;border-radius:8px;font-size:12px;"></div>
+      <div class="form-group" style="margin-top:16px;">
+        <label>Workforce Business ID <span style="font-size:10px;color:var(--text3);font-weight:400;">For payroll journal auto-entry</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="settings-linked-workforce-id"
+            placeholder="Paste your Workforce Business ID here"
+            style="font-family:'DM Mono',monospace;font-size:12px;">
+          <button class="btn btn-primary btn-sm" style="flex-shrink:0;" onclick="saveLinkedWorkforceId()">Save</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Found in Tayla Workforce → Business Settings → Business ID. Once linked, payroll push will automatically create journal entries here.</div>
+      </div>
+      <div id="settings-workforce-link-status" style="display:none;margin-top:8px;padding:8px 14px;border-radius:8px;font-size:12px;"></div>
     </div>
   </div>
 
@@ -3581,17 +3591,3 @@
 </div>
 
 <div id="toast"></div>
-
-<script src="db.js"></script>
-<script src="reconcile.js"></script>
-<script src="invoices.js"></script>
-<script src="bills.js"></script>
-<script src="assets.js"></script>
-<script src="receipts.js"></script>
-<script src="members.js"></script>
-<script src="import.js"></script>
-<script src="stocktake.js"></script>
-<script src="ordering.js"></script>
-<script src="app.js"></script>
-</body>
-</html>
