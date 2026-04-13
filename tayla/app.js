@@ -623,6 +623,7 @@ const CHART_OF_ACCOUNTS = {
       { id: '2020', name: 'GST Payable', type: 'liability', gst: false },
       { id: '2030', name: 'PAYG Withholding Payable', type: 'liability', gst: false },
       { id: '2040', name: 'Superannuation Payable', type: 'liability', gst: false },
+      { id: '2050', name: 'Net Wages Payable', type: 'liability', gst: false },
       { id: '2100', name: 'Loans Payable', type: 'liability', gst: false },
       { id: '2200', name: 'Provision for Annual Leave', type: 'liability', gst: false },
     ]
@@ -652,6 +653,7 @@ const CHART_OF_ACCOUNTS = {
       { id: '5020', name: 'Software Subscriptions', type: 'expense', gst: true },
       { id: '5030', name: 'Hosting & Infrastructure', type: 'expense', gst: true },
       { id: '5040', name: 'Salaries & Wages', type: 'expense', gst: false },
+      { id: '5041', name: 'Superannuation Expense', type: 'expense', gst: false },
       { id: '5050', name: 'Rent', type: 'expense', gst: true },
       { id: '5060', name: 'Depreciation Expense', type: 'expense', gst: false },
       { id: '5070', name: 'Bank Charges', type: 'expense', gst: true },
@@ -814,6 +816,7 @@ function showPage(id) {
     const bizIdEl = document.getElementById('settings-business-id-display');
     if (bizIdEl && _businessId) bizIdEl.value = _businessId;
     if (typeof loadFranchises === 'function') loadFranchises();
+    if (typeof loadLinkedWorkforceId === 'function') loadLinkedWorkforceId();
   }
   renderAll();
 }
@@ -2311,11 +2314,12 @@ function renderBalanceSheet() {
   const totalAssets = totalCurrentAssets + totalPPE + totalIntangible;
 
   // Liability accounts (credit-normal → negative in DR system → display as positive)
-  const apBal    = -(balances['2010'] || 0);
-  const gstPayBal = -(balances['2020'] || 0);
-  const paygBal  = -(balances['2030'] || 0);
-  const superBal = -(balances['2040'] || 0);
-  const loanBal  = -(balances['2100'] || 0);
+  const apBal       = -(balances['2010'] || 0);
+  const gstPayBal   = -(balances['2020'] || 0);
+  const paygBal     = -(balances['2030'] || 0);
+  const superBal    = -(balances['2040'] || 0);
+  const netWagesBal = -(balances['2050'] || 0);
+  const loanBal     = -(balances['2100'] || 0);
   const annLeaveBal = -(balances['2200'] || 0);
 
   // Manually-entered liabilities
@@ -2325,7 +2329,7 @@ function renderBalanceSheet() {
   const nonCurrentLiabTotal = nonCurrentLiabs.reduce((s, l) => s + l.value, 0);
 
   // Ledger-derived current liabilities
-  const ledgerCurrentLiabs = apBal + gstPayBal + paygBal + superBal + annLeaveBal;
+  const ledgerCurrentLiabs = apBal + gstPayBal + paygBal + superBal + netWagesBal + annLeaveBal;
   const ledgerNonCurrentLiabs = loanBal;
 
   const totalCurrentLiabs = ledgerCurrentLiabs + currentLiabTotal;
@@ -2401,6 +2405,7 @@ function renderBalanceSheet() {
     ${gstPayBal !== 0 ? bsRow('2020 GST Payable', gstPayBal) : ''}
     ${paygBal !== 0 ? bsRow('2030 PAYG Withholding Payable', paygBal) : ''}
     ${superBal !== 0 ? bsRow('2040 Superannuation Payable', superBal) : ''}
+    ${netWagesBal !== 0 ? bsRow('2050 Net Wages Payable', netWagesBal) : ''}
     ${annLeaveBal !== 0 ? bsRow('2200 Provision for Annual Leave', annLeaveBal) : ''}
     ${currentLiabs.map(l => bsRow(l.name, l.value)).join('')}
     ${totalCurrentLiabs > 0 ? bsTotal('Total Current Liabilities', totalCurrentLiabs) : '<div style="padding:6px 0;font-size:12px;color:var(--text3);">None</div>'}
@@ -3853,6 +3858,50 @@ function copyBusinessId() {
     if (el) { el.select(); document.execCommand('copy'); }
     toast('Business ID copied ✓');
   });
+}
+
+async function saveLinkedWorkforceId() {
+  const input   = document.getElementById('settings-linked-workforce-id');
+  const statusEl = document.getElementById('settings-workforce-link-status');
+  const val     = input?.value.trim();
+
+  if (!val) { toast('Please paste your Workforce Business ID first'); return; }
+  if (!_businessId) { toast('Not logged in'); return; }
+
+  const { error } = await _supabase
+    .from('businesses')
+    .update({ linked_workforce_id: val })
+    .eq('id', _businessId);
+
+  if (error) {
+    if (statusEl) {
+      statusEl.style.background = '#fde2e2';
+      statusEl.style.color      = 'var(--danger)';
+      statusEl.textContent      = '✕ Failed to save: ' + error.message;
+      statusEl.style.display    = 'block';
+    }
+    return;
+  }
+
+  if (statusEl) {
+    statusEl.style.background = '#d4edda';
+    statusEl.style.color      = 'var(--success)';
+    statusEl.textContent      = '✓ Workforce link saved — payroll pushes will now create journal entries automatically';
+    statusEl.style.display    = 'block';
+    setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+  }
+  toast('Workforce link saved ✓');
+}
+
+async function loadLinkedWorkforceId() {
+  if (!_businessId) return;
+  const { data } = await _supabase
+    .from('businesses')
+    .select('linked_workforce_id')
+    .eq('id', _businessId)
+    .maybeSingle();
+  const el = document.getElementById('settings-linked-workforce-id');
+  if (el && data?.linked_workforce_id) el.value = data.linked_workforce_id;
 }
 
 // Load sales_summary rows for a date range — used by stocktake UPT calculation
