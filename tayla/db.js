@@ -108,14 +108,14 @@ async function _fetchFromSupabase() {
     const [txRes, jRes, aRes, lRes, swRes] = await Promise.all([
       _supabase
         .from('transactions')
-        .select('id,date,description,amount,type,account,gst,debits,credits,notes,created_at,source')
+        .select('*')
         .eq('business_id', _businessId)
         .order('date', { ascending: false })
         .limit(500),
 
       _supabase
         .from('journals')
-        .select('id,date,memo,type,gst_on,source,created_at,journal_lines(id,account_id,account_name,debit,credit,description,sort_order)')
+        .select('*, journal_lines(*)')
         .eq('business_id', _businessId)
         .order('date', { ascending: false })
         .limit(500),
@@ -132,12 +132,24 @@ async function _fetchFromSupabase() {
 
       _supabase
         .from('software_products')
-        .select('id,name,software_tiers(id,name,price),software_monthly_users(id,month_key,free_count,staff_count,tier_counts)')
+        .select('*')
         .eq('business_id', _businessId),
     ]);
 
     const errors = [txRes, jRes, aRes, lRes, swRes].map(r => r.error).filter(Boolean);
     if (errors.length) throw errors[0];
+
+    // Also fetch tiers and monthly users — filtered by business via software_id join
+    const swIds = (swRes.data || []).map(s => s.id);
+    let tierData = [], muData = [];
+    if (swIds.length) {
+      const [tierRes, muRes] = await Promise.all([
+        _supabase.from('software_tiers').select('*').in('software_id', swIds),
+        _supabase.from('software_monthly_users').select('*').in('software_id', swIds),
+      ]);
+      tierData = tierRes.data || [];
+      muData   = muRes.data  || [];
+    }
 
     // Remap description → desc for app compatibility, parse debits/credits
     const txData = (txRes.data || []).map(({ description, debits, credits, ...rest }) => ({
@@ -157,9 +169,10 @@ async function _fetchFromSupabase() {
       })),
     }));
 
-    // Build software list from nested selects (no extra round trips)
+    // Build software list
     const softwareData = (swRes.data || []).map(sw => {
-      const allMU = sw.software_monthly_users || [];
+      const tiers = tierData.filter(t => t.software_id === sw.id);
+      const allMU = muData.filter(m => m.software_id === sw.id);
       const monthlyUsers = {};
       allMU.forEach(m => {
         if (!monthlyUsers[m.month_key]) monthlyUsers[m.month_key] = {};
@@ -170,12 +183,7 @@ async function _fetchFromSupabase() {
           Object.assign(monthlyUsers[m.month_key], tc);
         } catch {}
       });
-      return {
-        id:           sw.id,
-        name:         sw.name,
-        tiers:        sw.software_tiers || [],
-        monthlyUsers,
-      };
+      return { id: sw.id, name: sw.name, tiers, monthlyUsers };
     });
 
     // Write to cache
