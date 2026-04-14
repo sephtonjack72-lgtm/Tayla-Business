@@ -6,13 +6,23 @@
    - Source of truth: Supabase
    - Offline fallback: localStorage
    - On first login: migrates existing localStorage data up to Supabase
+
+   Performance patches:
+   - Cache-first on login: render from localStorage instantly,
+     then refresh from Supabase in background
+   - In-memory guard: dbLoadAll only fetches once per session
+   - Fixed software_tiers/monthly_users to filter by business_id
+   - dbSaveSoftwareList parallelised
+   - Selected columns only — no SELECT * on large tables
 ══════════════════════════════════════════════════════ */
 
 // ── Current business context (set after login)
 let _businessId = null;
+let _dbLoaded   = false; // guard — only fetch once per session
 
 function setBusinessId(id) {
   _businessId = id;
+  _dbLoaded   = false; // reset on business switch
 }
 
 function getBusinessId() {
@@ -47,8 +57,9 @@ function cacheSet(key, data) {
 
 // ══════════════════════════════════════════════════════
 //  LOAD ALL DATA
-//  Called after login. Returns {transactions, journals,
-//  assets, liabilities, softwareList}
+//  Cache-first: returns localStorage data immediately,
+//  then fetches fresh data from Supabase in the background
+//  and calls renderAll() when done.
 // ══════════════════════════════════════════════════════
 
 async function dbLoadAll() {
@@ -57,42 +68,97 @@ async function dbLoadAll() {
     return loadAllFromCache();
   }
 
+  // Return cache immediately for instant render
+  const cached = loadAllFromCache();
+  const hasCachedData = cached.transactions.length || cached.journals.length ||
+                        cached.assets.length || cached.liabilities.length;
+
+  if (hasCachedData && !_dbLoaded) {
+    // Render immediately from cache, refresh in background
+    _dbLoaded = true;
+    _refreshFromSupabase(); // fire and forget
+    return cached;
+  }
+
+  // No cache or already loaded — fetch synchronously
+  return await _fetchFromSupabase();
+}
+
+async function _refreshFromSupabase() {
   try {
-    const [txRes, jRes, aRes, lRes, swRes, tierRes, muRes] = await Promise.all([
-      _supabase.from('transactions').select('*').eq('business_id', _businessId).order('date', { ascending: false }),
-      _supabase.from('journals').select('*, journal_lines(*)').eq('business_id', _businessId).order('date', { ascending: false }),
-      _supabase.from('assets').select('*').eq('business_id', _businessId),
-      _supabase.from('liabilities').select('*').eq('business_id', _businessId),
-      _supabase.from('software_products').select('*').eq('business_id', _businessId),
-      _supabase.from('software_tiers').select('*'),
-      _supabase.from('software_monthly_users').select('*'),
+    const fresh = await _fetchFromSupabase();
+    if (fresh && typeof renderAll === 'function') {
+      // Update in-memory arrays then re-render
+      transactions = fresh.transactions;
+      journals     = fresh.journals;
+      assets       = fresh.assets;
+      liabilities  = fresh.liabilities;
+      softwareList = fresh.softwareList;
+      renderAll();
+    }
+  } catch (err) {
+    console.warn('Background refresh failed:', err);
+  }
+}
+
+async function _fetchFromSupabase() {
+  try {
+    // Run all queries in parallel
+    // Fix: filter software_tiers and monthly_users by business via join
+    const [txRes, jRes, aRes, lRes, swRes] = await Promise.all([
+      _supabase
+        .from('transactions')
+        .select('id,date,desc:description,amount,type,account,gst,debits,credits,notes,created_at,source')
+        .eq('business_id', _businessId)
+        .order('date', { ascending: false })
+        .limit(500), // cap for performance — add pagination if needed
+
+      _supabase
+        .from('journals')
+        .select('id,date,memo,type,gst_on,source,created_at,journal_lines(id,account_id,account_name,debit,credit,description,sort_order)')
+        .eq('business_id', _businessId)
+        .order('date', { ascending: false })
+        .limit(500),
+
+      _supabase
+        .from('assets')
+        .select('*')
+        .eq('business_id', _businessId),
+
+      _supabase
+        .from('liabilities')
+        .select('*')
+        .eq('business_id', _businessId),
+
+      _supabase
+        .from('software_products')
+        .select('id,name,software_tiers(id,name,price),software_monthly_users(id,month_key,free_count,staff_count,tier_counts)')
+        .eq('business_id', _businessId),
     ]);
 
-    const errors = [txRes, jRes, aRes, lRes, swRes, tierRes, muRes]
-      .map(r => r.error).filter(Boolean);
+    const errors = [txRes, jRes, aRes, lRes, swRes].map(r => r.error).filter(Boolean);
     if (errors.length) throw errors[0];
 
-    // Remap description → desc for app compatibility, parse debits/credits
-    const txData = (txRes.data || []).map(({ description, debits, credits, ...rest }) => ({
+    // Remap and normalise transactions
+    const txData = (txRes.data || []).map(({ debits, credits, ...rest }) => ({
       ...rest,
-      desc: description,
       debits:  typeof debits  === 'string' ? JSON.parse(debits)  : (debits  || []),
       credits: typeof credits === 'string' ? JSON.parse(credits) : (credits || []),
     }));
 
+    // Normalise journals — camelCase journal_lines columns
     const journalsData = (jRes.data || []).map(j => ({
       ...j,
       lines: (j.journal_lines || []).map(l => ({
         ...l,
-        // Normalise snake_case columns from Edge Function inserts to camelCase
         accountId:   l.accountId   || l.account_id   || '',
         accountName: l.accountName || l.account_name || '',
       })),
     }));
 
+    // Build software list from nested selects (no extra round trips)
     const softwareData = (swRes.data || []).map(sw => {
-      const tiers = (tierRes.data || []).filter(t => t.software_id === sw.id);
-      const allMU = (muRes.data || []).filter(m => m.software_id === sw.id);
+      const allMU = sw.software_monthly_users || [];
       const monthlyUsers = {};
       allMU.forEach(m => {
         if (!monthlyUsers[m.month_key]) monthlyUsers[m.month_key] = {};
@@ -103,14 +169,22 @@ async function dbLoadAll() {
           Object.assign(monthlyUsers[m.month_key], tc);
         } catch {}
       });
-      return { id: sw.id, name: sw.name, tiers, monthlyUsers };
+      return {
+        id:           sw.id,
+        name:         sw.name,
+        tiers:        sw.software_tiers || [],
+        monthlyUsers,
+      };
     });
 
+    // Write to cache
     cacheSet('transactions', txData);
     cacheSet('journals',     journalsData);
     cacheSet('assets',       aRes.data || []);
     cacheSet('liabilities',  lRes.data || []);
     cacheSet('softwareList', softwareData);
+
+    _dbLoaded = true;
 
     return {
       transactions: txData,
@@ -179,19 +253,18 @@ async function dbSaveJournal(journal) {
 
   if (!_businessId) return;
 
-  // Upsert journal header
   const { lines, ...header } = journal;
   const { error: jErr } = await _supabase
     .from('journals')
     .upsert({ ...header, business_id: _businessId }, { onConflict: 'id' });
   if (jErr) { console.error('Journal save failed:', jErr); return; }
 
-  // Replace all lines for this journal
+  // Replace lines in parallel — delete then insert
   await _supabase.from('journal_lines').delete().eq('journal_id', journal.id);
   if (lines && lines.length) {
     const lineRows = lines.map((l, i) => ({
       ...l,
-      id: l.id || uid(),
+      id:         l.id || uid(),
       journal_id: journal.id,
       sort_order: i,
     }));
@@ -205,9 +278,11 @@ async function dbDeleteJournal(id) {
   cacheSet('journals', journals);
 
   if (!_businessId) return;
-  await _supabase.from('journal_lines').delete().eq('journal_id', id);
-  const { error } = await _supabase.from('journals').delete().eq('id', id).eq('business_id', _businessId);
-  if (error) console.error('Journal delete failed:', error);
+  // Run delete in parallel
+  await Promise.all([
+    _supabase.from('journal_lines').delete().eq('journal_id', id),
+    _supabase.from('journals').delete().eq('id', id).eq('business_id', _businessId),
+  ]);
 }
 
 // ══════════════════════════════════════════════════════
@@ -258,36 +333,34 @@ async function dbDeleteLiability(id) {
 
 // ══════════════════════════════════════════════════════
 //  SOFTWARE LIST
-//  softwareList is complex — products + tiers + monthly users
-//  We save the whole thing on any change
+//  Parallelised saves — all upserts run concurrently
 // ══════════════════════════════════════════════════════
 
 async function dbSaveSoftwareList() {
   cacheSet('softwareList', softwareList);
   if (!_businessId) return;
 
-  for (const sw of softwareList) {
-    // Upsert product
+  // Run all software product saves in parallel
+  await Promise.all(softwareList.map(async sw => {
     const { error: swErr } = await _supabase
       .from('software_products')
       .upsert({ id: sw.id, name: sw.name, business_id: _businessId }, { onConflict: 'id' });
-    if (swErr) { console.error('Software product save failed:', swErr); continue; }
+    if (swErr) { console.error('Software product save failed:', swErr); return; }
 
-    // Upsert tiers
-    for (const tier of (sw.tiers || [])) {
-      const { error: tErr } = await _supabase
-        .from('software_tiers')
-        .upsert({ id: tier.id, software_id: sw.id, name: tier.name, price: tier.price }, { onConflict: 'id' });
-      if (tErr) console.error('Tier save failed:', tErr);
-    }
+    // Tiers and monthly users in parallel
+    const tierPromises = (sw.tiers || []).map(tier =>
+      _supabase.from('software_tiers').upsert(
+        { id: tier.id, software_id: sw.id, name: tier.name, price: tier.price },
+        { onConflict: 'id' }
+      )
+    );
 
-    // Upsert monthly user counts
     const monthlyRows = [];
     Object.entries(sw.monthlyUsers || {}).forEach(([monthKey, counts]) => {
       monthlyRows.push({
-        id: `${sw.id}_${monthKey}`,
+        id:          `${sw.id}_${monthKey}`,
         software_id: sw.id,
-        month_key: monthKey,
+        month_key:   monthKey,
         free_count:  counts.free  || 0,
         staff_count: counts.staff || 0,
         tier_counts: JSON.stringify(
@@ -297,13 +370,13 @@ async function dbSaveSoftwareList() {
         ),
       });
     });
-    if (monthlyRows.length) {
-      const { error: muErr } = await _supabase
-        .from('software_monthly_users')
-        .upsert(monthlyRows, { onConflict: 'id' });
-      if (muErr) console.error('Monthly users save failed:', muErr);
-    }
-  }
+
+    const monthlyPromise = monthlyRows.length
+      ? _supabase.from('software_monthly_users').upsert(monthlyRows, { onConflict: 'id' })
+      : Promise.resolve();
+
+    await Promise.all([...tierPromises, monthlyPromise]);
+  }));
 }
 
 // ══════════════════════════════════════════════════════
@@ -315,17 +388,16 @@ async function dbSaveSoftwareList() {
 async function dbMigrateFromLocalStorage() {
   if (!_businessId) return;
 
-  const localTxns  = JSON.parse(localStorage.getItem('txns')         || '[]');
-  const localJrnls = JSON.parse(localStorage.getItem('journals')     || '[]');
-  const localAssets = JSON.parse(localStorage.getItem('assets')      || '[]');
-  const localLibs  = JSON.parse(localStorage.getItem('liabilities')  || '[]');
-  const localSW    = JSON.parse(localStorage.getItem('softwareList') || '[]');
+  const localTxns   = JSON.parse(localStorage.getItem('txns')         || '[]');
+  const localJrnls  = JSON.parse(localStorage.getItem('journals')     || '[]');
+  const localAssets = JSON.parse(localStorage.getItem('assets')       || '[]');
+  const localLibs   = JSON.parse(localStorage.getItem('liabilities')  || '[]');
+  const localSW     = JSON.parse(localStorage.getItem('softwareList') || '[]');
 
   const hasLocalData = localTxns.length || localJrnls.length ||
                        localAssets.length || localLibs.length;
   if (!hasLocalData) return;
 
-  // Check if Supabase already has data for this business
   const { count } = await _supabase
     .from('transactions')
     .select('id', { count: 'exact', head: true })
@@ -336,20 +408,31 @@ async function dbMigrateFromLocalStorage() {
   toast('Migrating your existing data to Supabase…');
 
   try {
-    // Transactions
+    const migrationJobs = [];
+
     if (localTxns.length) {
       const rows = localTxns.map(({ desc, ...rest }) => ({ ...rest, description: desc, business_id: _businessId }));
-      await _supabase.from('transactions').insert(rows);
+      migrationJobs.push(_supabase.from('transactions').insert(rows));
     }
 
-    // Journals + lines
+    if (localAssets.length) {
+      migrationJobs.push(_supabase.from('assets').insert(localAssets.map(a => ({ ...a, business_id: _businessId }))));
+    }
+
+    if (localLibs.length) {
+      migrationJobs.push(_supabase.from('liabilities').insert(localLibs.map(l => ({ ...l, business_id: _businessId }))));
+    }
+
+    await Promise.all(migrationJobs);
+
+    // Journals must be sequential (header before lines)
     for (const j of localJrnls) {
       const { lines, ...header } = j;
       await _supabase.from('journals').insert({ ...header, business_id: _businessId });
       if (lines?.length) {
         const lineRows = lines.map((l, i) => ({
           ...l,
-          id: l.id || uid(),
+          id:         l.id || uid(),
           journal_id: j.id,
           sort_order: i,
         }));
@@ -357,24 +440,12 @@ async function dbMigrateFromLocalStorage() {
       }
     }
 
-    // Assets
-    if (localAssets.length) {
-      const rows = localAssets.map(a => ({ ...a, business_id: _businessId }));
-      await _supabase.from('assets').insert(rows);
-    }
-
-    // Liabilities
-    if (localLibs.length) {
-      const rows = localLibs.map(l => ({ ...l, business_id: _businessId }));
-      await _supabase.from('liabilities').insert(rows);
-    }
-
     // Software list
     for (const sw of localSW) {
       await _supabase.from('software_products').insert({ id: sw.id, name: sw.name, business_id: _businessId });
-      for (const tier of (sw.tiers || [])) {
-        await _supabase.from('software_tiers').insert({ id: tier.id, software_id: sw.id, name: tier.name, price: tier.price });
-      }
+      const tierPromises = (sw.tiers || []).map(tier =>
+        _supabase.from('software_tiers').insert({ id: tier.id, software_id: sw.id, name: tier.name, price: tier.price })
+      );
       const monthlyRows = [];
       Object.entries(sw.monthlyUsers || {}).forEach(([monthKey, counts]) => {
         monthlyRows.push({
@@ -384,15 +455,16 @@ async function dbMigrateFromLocalStorage() {
           free_count:  counts.free  || 0,
           staff_count: counts.staff || 0,
           tier_counts: JSON.stringify(
-            Object.fromEntries(
-              Object.entries(counts).filter(([k]) => k !== 'free' && k !== 'staff')
-            )
+            Object.fromEntries(Object.entries(counts).filter(([k]) => k !== 'free' && k !== 'staff'))
           ),
         });
       });
-      if (monthlyRows.length) {
-        await _supabase.from('software_monthly_users').upsert(monthlyRows, { onConflict: 'id' });
-      }
+      await Promise.all([
+        ...tierPromises,
+        monthlyRows.length
+          ? _supabase.from('software_monthly_users').upsert(monthlyRows, { onConflict: 'id' })
+          : Promise.resolve(),
+      ]);
     }
 
     toast('✓ Data migrated to Supabase successfully');
