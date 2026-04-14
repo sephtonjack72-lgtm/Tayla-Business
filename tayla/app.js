@@ -312,10 +312,10 @@ async function signOut() {
 //  SETUP WIZARD
 // ══════════════════════════════════════════════════════
 const BIZ_TYPES = [
-  { id: 'saas',     icon: '💻', title: 'SaaS',            desc: 'Subscription software — MRR, tiers, churn' },
-  { id: 'hospitality', icon: '🍽', title: 'Hospitality',  desc: 'Cafés, restaurants, bars — sales, COGS, stock tracking' },
-  { id: 'retail',   icon: '🛍', title: 'Retail',           desc: 'Products & e-commerce — inventory, COGS, margin' },
-  { id: 'professional', icon: '💼', title: 'Professional Services', desc: 'Agency, consulting, freelance — hourly or project billing' },
+  { id: 'saas',     icon: 'saas', title: 'SaaS',            desc: 'Subscription software — MRR, tiers, churn' },
+  { id: 'hospitality', icon: 'hospitality', title: 'Hospitality',  desc: 'Cafés, restaurants, bars — sales, COGS, stock tracking' },
+  { id: 'retail',   icon: `${ICONS.shopping}`, title: 'Retail',           desc: 'Products & e-commerce — inventory, COGS, margin' },
+  { id: 'professional', icon: `${ICONS.briefcase}`, title: 'Professional Services', desc: 'Agency, consulting, freelance — hourly or project billing' },
 ];
 
 let setupStep = 1;
@@ -912,7 +912,7 @@ function addTxLine(type) {
       ${buildAccountOptions()}
     </select>
     <input type="number" id="tx-${type}-amount-${count}" placeholder="Amount" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="validateTx();updateGstPreview()">
-    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();validateTx();updateGstPreview()" style="padding:4px 8px;">✕</button>
+    <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove();validateTx();updateGstPreview()" style="padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   `;
   container.appendChild(div);
 }
@@ -946,7 +946,7 @@ function validateTx() {
     validationDiv.style.display = 'block';
     validationDiv.style.background = '#fde2e2';
     validationDiv.style.color = 'var(--danger)';
-    validationDiv.innerHTML = `❌ Out of balance by ${fmt(diff)}`;
+    validationDiv.innerHTML = `✗ Out of balance by ${fmt(diff)}`;
     return false;
   } else {
     validationDiv.style.display = 'block';
@@ -1176,7 +1176,7 @@ function addJournalLine() {
     </select>
     <input type="number" class="journal-debit" placeholder="Debit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#4f8ef7':'var(--border)';validateJournal();updateJournalGstPreview()">
     <input type="number" class="journal-credit" placeholder="Credit" step="0.01" min="0" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);" oninput="this.style.borderColor=this.value>0?'#e8c547':'var(--border)';validateJournal();updateJournalGstPreview()">
-    <button class="btn btn-danger btn-sm" onclick="removeJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
+    <button class="btn btn-danger btn-sm" onclick="removeJournalLine('${lineId}')" style="padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   `;
   container.appendChild(div);
 }
@@ -1220,7 +1220,7 @@ function validateJournal() {
     validationDiv.style.display = 'block';
     validationDiv.style.background = '#fde2e2';
     validationDiv.style.color = 'var(--danger)';
-    validationDiv.innerHTML = `❌ Out of balance by ${fmt(diff)} — Debits must equal Credits`;
+    validationDiv.innerHTML = `✗ Out of balance by ${fmt(diff)} — Debits must equal Credits`;
     return false;
   } else {
     validationDiv.style.display = 'block';
@@ -1457,9 +1457,9 @@ function renderJournals() {
         <td style="padding:10px 12px;white-space:nowrap;">
           ${j.source === 'journal'
             ? `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}')" style="color:var(--text);">✎ Edit</button>
-               <button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')">✕</button>`
+               <button class="btn btn-danger btn-sm" onclick="deleteJournal('${j.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
             : `<button class="btn btn-ghost btn-sm" onclick="openEditJournal('${j.id}','tx')" style="color:var(--text);">✎ Edit</button>
-               <button class="btn btn-danger btn-sm" onclick="deleteTx('${j.id}')">✕</button>`}
+               <button class="btn btn-danger btn-sm" onclick="deleteTx('${j.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`}
         </td>
       </tr>
       ${lineRows}
@@ -1538,7 +1538,7 @@ function addEditJournalLine(accountId = '', debit = '', credit = '') {
       style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);${debit > 0 ? 'border-color:#4f8ef7;' : ''}" oninput="validateEditJournal()">
     <input type="number" class="ej-credit" placeholder="Credit" step="0.01" min="0" value="${credit > 0 ? credit : ''}"
       style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--bg);${credit > 0 ? 'border-color:#e8c547;' : ''}" oninput="validateEditJournal()">
-    <button class="btn btn-danger btn-sm" onclick="removeEditJournalLine('${lineId}')" style="padding:4px 8px;">✕</button>
+    <button class="btn btn-danger btn-sm" onclick="removeEditJournalLine('${lineId}')" style="padding:4px 8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   `;
   container.appendChild(div);
 }
@@ -1567,7 +1567,7 @@ function validateEditJournal() {
     return false;
   } else if (diff > 0.01) {
     el.style.background = '#fde2e2'; el.style.color = 'var(--danger)';
-    el.innerHTML = `❌ Out of balance by ${fmt(diff)}`;
+    el.innerHTML = `✗ Out of balance by ${fmt(diff)}`;
     return false;
   } else {
     el.style.background = '#d4edda'; el.style.color = 'var(--success)';
@@ -2060,7 +2060,7 @@ function renderTransactions() {
       <td style="font-size:11px;">${debitAccounts}</td>
       <td style="font-size:11px;">${creditAccounts}</td>
       <td class="mono">${fmt(t.amount)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteTx('${t.id}')">✕</button></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteTx('${t.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></td>
     </tr>`;
   }).join('');
 }
@@ -2440,7 +2440,7 @@ function renderAssets() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="mono" style="font-size:13px;">${fmt(a.value)}</span>
-          <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')">✕</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAsset('${a.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       </div>
     `).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No assets recorded.</div>';
@@ -2456,7 +2456,7 @@ function renderAssets() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="mono" style="font-size:13px;color:var(--danger);">${fmt(l.value)}</span>
-          <button class="btn btn-danger btn-sm" onclick="deleteLiability('${l.id}')">✕</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteLiability('${l.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       </div>
     `).join('') : '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No liabilities recorded.</div>';
@@ -3612,7 +3612,7 @@ function renderSettingsProfilePreview() {
   const el = document.getElementById('settings-profile-preview');
   if (!el || !_businessProfile) return;
   const p = _businessProfile;
-  const bizType = { saas:'💻 SaaS', hospitality:'🍽 Hospitality', retail:'🛍 Retail', professional:'💼 Professional Services' }[p.biz_type] || p.biz_type;
+  const bizType = { saas:'SaaS', hospitality:'Hospitality', retail:'Retail', professional:'Professional Services' }[p.biz_type] || p.biz_type;
   el.innerHTML = `
     <div style="display:grid;grid-template-columns:auto 1fr;gap:5px 16px;">
       <span style="color:var(--text3);font-size:12px;">Type</span><span>${bizType}</span>
@@ -3689,7 +3689,7 @@ function renderSoftwareSettings() {
           <input type="number" value="${t.price}" step="0.01" min="0" style="width:72px;border:1.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;background:var(--bg);" onchange="updateTierPrice('${sw.id}','${t.id}',this.value)">
           <span style="font-size:11px;color:var(--text3);">/mo</span>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="deleteTier('${sw.id}','${t.id}')">✕</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTier('${sw.id}','${t.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`).join('');
 
     const latestFilled = MONTHS.filter(m => swTotalUsers(sw, m.key) > 0);
@@ -4270,8 +4270,8 @@ async function renderDashboardGroupKPIs() {
 // ══════════════════════════════════════════════════════
 
 const EVENT_LABELS = {
-  stocktake_submitted: { icon: '📦', label: 'Stocktake Submitted' },
-  period_closed:       { icon: '📅', label: 'Period Closed' },
+  stocktake_submitted: { icon: `${ICONS.package}`, label: 'Stocktake Submitted' },
+  period_closed:       { icon: `${ICONS.calendar}`, label: 'Period Closed' },
   po_received:         { icon: '🚚', label: 'Goods Received' },
 };
 
@@ -4369,7 +4369,7 @@ async function renderNotifPanelList() {
   }
 
   el.innerHTML = events.slice(0, 8).map(e => {
-    const meta = EVENT_LABELS[e.event_type] || { icon: '📋', label: e.event_type };
+    const meta = EVENT_LABELS[e.event_type] || { icon: `${ICONS.fileText}`, label: e.event_type };
     const age  = formatEventAge(e.created_at);
     return `
       <div style="
@@ -4439,7 +4439,7 @@ async function renderFranchiseNotifications() {
   }
 
   el.innerHTML = filtered.map(e => {
-    const meta = EVENT_LABELS[e.event_type] || { icon: '📋', label: e.event_type };
+    const meta = EVENT_LABELS[e.event_type] || { icon: `${ICONS.fileText}`, label: e.event_type };
     const age  = formatEventAge(e.created_at);
     return `
       <div style="
