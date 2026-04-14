@@ -3,6 +3,15 @@
    app.js
 ══════════════════════════════════════════════════════ */
 
+// ── appSettings must be initialised before anything else
+// (used in applyProfileToApp which runs on login)
+let appSettings = JSON.parse(localStorage.getItem('appSettings') || JSON.stringify({
+  bizModel: 'saas',
+  bizName: 'Tayla',
+  defaultEntity: 'sole_trader',
+  defaultFY: '2026'
+}));
+
 // ══════════════════════════════════════════════════════
 //  SUPABASE CONFIG
 //  ⚠ Replace these with your actual project values
@@ -3410,12 +3419,6 @@ function getMarginalRate(income, brackets) {
 // ══════════════════════════════════════════════════════
 //  SETTINGS
 // ══════════════════════════════════════════════════════
-let appSettings = JSON.parse(localStorage.getItem('appSettings') || JSON.stringify({
-  bizModel: 'saas',
-  bizName: 'Tayla',
-  defaultEntity: 'sole_trader',
-  defaultFY: '2026'
-}));
 
 function saveSettings() {
   appSettings.bizModel       = document.getElementById('setting-biz-model')?.value || 'saas';
