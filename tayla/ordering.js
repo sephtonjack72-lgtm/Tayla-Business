@@ -450,7 +450,7 @@ function renderPOList() {
             <span class="badge po-status-${po.status}">${poStatusLabel(po.status)}</span>
           </div>
           <div style="font-size:12px;color:var(--text3);margin-top:3px;">
-            ${supplier?.name || '—'} · ${fmtDate(po.date)}
+            ${supplier?.name || 'In-person purchase'} · ${fmtDate(po.date)}
             ${po.expected_date ? ' · Expected ' + fmtDate(po.expected_date) : ''}
           </div>
           ${po.status === 'partial' ? `
@@ -558,10 +558,20 @@ function openEditPOModal(poId) {
 function populatePOSupplierDropdown(selId, selectedId) {
   const sel = document.getElementById(selId);
   if (!sel) return;
-  sel.innerHTML = '<option value="">Select supplier…</option>' +
+  sel.innerHTML = '<option value="">No supplier (in-person / cash purchase)</option>' +
     (typeof suppliers !== 'undefined' ? suppliers : []).map(s =>
       `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${s.name}</option>`
     ).join('');
+  // Update email button visibility on change
+  sel.onchange = () => updatePOModalEmailBtn(sel.value);
+  updatePOModalEmailBtn(selectedId || '');
+}
+
+function updatePOModalEmailBtn(supplierId) {
+  const btn = document.getElementById('ord-po-modal-email-btn');
+  if (!btn) return;
+  const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === supplierId);
+  btn.style.display = supplier?.email ? 'inline-flex' : 'none';
 }
 
 function addPOLine(line) {
@@ -649,7 +659,6 @@ async function savePOAs(status) {
   const notes       = document.getElementById('ord-po-notes').value.trim();
   const lines       = getPOLines();
 
-  if (!supplierId)   { toast('Please select a supplier'); return; }
   if (!date)         { toast('Date is required'); return; }
   if (!lines.length) { toast('Add at least one line item'); return; }
 
@@ -781,8 +790,8 @@ function viewPO(id) {
   // Show/hide action buttons based on status
   const canEdit    = ['draft'].includes(po.status);
   const canSend    = ['draft'].includes(po.status);
-  const canEmail   = ['draft','sent'].includes(po.status);
-  const canReceive = ['sent','partial'].includes(po.status);
+  const canEmail   = ['draft','sent'].includes(po.status) && !!(supplier?.email);
+  const canReceive = ['sent','partial','draft'].includes(po.status);
   const canReturn  = ['partial','received'].includes(po.status);
   const canVoid    = ['draft','sent'].includes(po.status);
   const hasPortal  = !!(supplier?.order_portal_url);
@@ -828,6 +837,7 @@ function openSupplierPortal(supplierId) {
 }
 
 // Mark a draft PO as sent directly from the detail modal
+// For in-person purchases (no supplier email), this marks as sent so goods can be received
 async function savePOFromDetail() {
   const po = _viewingPO;
   if (!po) return;
@@ -839,7 +849,9 @@ async function savePOFromDetail() {
   viewPO(po.id);
   renderPOList();
   renderOrdKpis();
-  toast(`PO ${po.po_number} marked as sent ✓`);
+  const supplier = (typeof suppliers !== 'undefined' ? suppliers : []).find(s => s.id === po.supplier_id);
+  const label = supplier?.email ? `PO ${po.po_number} marked as sent ✓` : `PO ${po.po_number} marked as sent — ready to receive goods ✓`;
+  toast(label);
 }
 
 // ══════════════════════════════════════════════════════
