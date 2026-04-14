@@ -305,9 +305,9 @@
       <!-- Import tabs -->
       <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;">
         <button class="import-tab active" id="itab-contacts"     onclick="showImportTab('contacts')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">👤 Contacts</button>
-        <button class="import-tab"        id="itab-accounts"     onclick="showImportTab('accounts')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">📊 Chart of Accounts</button>
+        <button class="import-tab"        id="itab-accounts"     onclick="showImportTab('accounts')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Chart of Accounts</button>
         <button class="import-tab"        id="itab-balances"     onclick="showImportTab('balances')"     style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">⚖ Opening Balances</button>
-        <button class="import-tab"        id="itab-transactions" onclick="showImportTab('transactions')" style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;">📋 Transactions</button>
+        <button class="import-tab"        id="itab-transactions" onclick="showImportTab('transactions')" style="padding:10px 16px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;white-space:nowrap;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Transactions</button>
       </div>
 
       <!-- Contacts import -->
@@ -400,7 +400,7 @@
   <!-- Read-only banner for accountants -->
   <div id="readonly-banner" style="display:none;background:rgba(232,197,71,.15);border:1px solid var(--accent2);border-radius:8px;padding:6px 14px;font-size:12px;color:var(--accent2);font-weight:500;">
   <div id="manager-banner" style="display:none;background:rgba(99,179,237,.12);border:1px solid #63b3ed;border-radius:8px;padding:6px 14px;font-size:12px;color:#2b6cb0;font-weight:500;">
-    🔧 Manager access — <span id="manager-perm-label">Full Access</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Manager access — <span id="manager-perm-label">Full Access</span>
   </div>
     👁 Accountant view — read only
   </div>
@@ -412,7 +412,7 @@
         padding:6px 8px;border-radius:8px;color:#fff;font-size:18px;
         display:flex;align-items:center;
       " title="Franchise notifications">
-        🔔
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span id="notif-badge" style="
           display:none;position:absolute;top:2px;right:2px;
           background:#e53e3e;color:#fff;border-radius:99px;
@@ -447,8 +447,8 @@
       ">
         <div id="user-email-display" style="padding:12px 16px;font-size:12px;color:var(--text3);border-bottom:1px solid var(--border);"></div>
         <div id="user-role-display" style="display:none;padding:8px 16px;font-size:11px;color:var(--accent2);background:rgba(232,197,71,.08);border-bottom:1px solid var(--border);">👁 Accountant access</div>
-        <div onclick="openSetupWizard();toggleUserMenu()" id="menu-setup-item" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">⚙ Business Setup</div>
-        <div onclick="showPage('settings-page');showInvTab && showInvTab('list');document.getElementById('settings-members-section').scrollIntoView();toggleUserMenu();" id="menu-team-item" style="display:none;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">👥 Team Access</div>
+        <div onclick="openSetupWizard();toggleUserMenu()" id="menu-setup-item" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Business Setup</div>
+        <div onclick="showPage('settings-page');showInvTab && showInvTab('list');document.getElementById('settings-members-section').scrollIntoView();toggleUserMenu();" id="menu-team-item" style="display:none;padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text);" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Team Access</div>
         <div onclick="signOut()" style="padding:11px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--danger);border-top:1px solid var(--border);" onmouseover="this.style.background='#fde2e2'" onmouseout="this.style.background=''">→ Sign Out</div>
       </div>
     </div>
@@ -473,7 +473,7 @@
   </div>
   <div class="tab" onclick="showPage('reconcile-page')">⇄ Reconcile</div>
   <div class="tab tab-dropdown" id="invoices-tab">
-    <span onclick="toggleInvoicesMenu(event)">🧾 Invoices ▾</span>
+    <span onclick="toggleInvoicesMenu(event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> Invoices ▾</span>
     <div class="dropdown-menu" id="invoices-menu">
       <div class="dropdown-item" onclick="showPage('invoices-page');closeInvoicesMenu()">Invoices</div>
       <div class="dropdown-item" onclick="showPage('bills-page');closeInvoicesMenu()">Bills</div>
@@ -482,8 +482,8 @@
   </div>
   <div class="tab" id="nav-stocktake-tab" onclick="showPage('stocktake-page')" style="display:none;">Stocktake</div>
   <div class="tab" id="nav-ordering-tab" onclick="showPage('ordering-page')" style="display:none;">Ordering</div>
-  <div class="tab" id="nav-franchises-tab" onclick="showPage('franchise-overview-page')" style="display:none;">🏢 Franchises</div>
-  <div class="tab" id="tab-settings" onclick="showPage('settings-page')">⚙ Settings</div>
+  <div class="tab" id="nav-franchises-tab" onclick="showPage('franchise-overview-page')" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="22" x2="9" y2="12"/><line x1="15" y1="22" x2="15" y2="12"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="7" x2="20" y2="7"/></svg> Franchises</div>
+  <div class="tab" id="tab-settings" onclick="showPage('settings-page')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</div>
 </nav>
 
 <main>
@@ -1033,7 +1033,7 @@
   <!-- Important notes -->
   <div class="card mt" style="border-left:4px solid var(--accent2);">
     <div class="card-body" style="padding:16px 20px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;">⚠ Important Notes</div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text3);margin-bottom:8px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2.5"/></svg> Important Notes</div>
       <div id="tax-notes" style="font-size:13px;color:var(--text2);line-height:1.7;"></div>
     </div>
   </div>
@@ -1050,7 +1050,7 @@
         <div class="card-title">Business Profile</div>
         <div class="text-sm">Your business details as set up in the onboarding wizard.</div>
       </div>
-      <button class="btn btn-primary btn-sm" onclick="openSetupWizard()">✏ Edit Profile</button>
+      <button class="btn btn-primary btn-sm" onclick="openSetupWizard()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit Profile</button>
     </div>
     <div class="card-body">
       <div id="settings-profile-preview" style="font-size:13px;color:var(--text2);line-height:1.8;">
@@ -1187,7 +1187,7 @@
 
       <div id="model-detail-retail" style="display:none;margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">🛍</div>
+          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
           <div>
             <div style="font-weight:600;font-size:14px;">Retail</div>
             <div style="font-size:12px;color:var(--text3);">Products & e-commerce — inventory, COGS, gross margin</div>
@@ -1206,7 +1206,7 @@
 
       <div id="model-detail-professional" style="display:none;margin-top:20px;background:var(--surface2);border-radius:10px;padding:20px;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;">💼</div>
+          <div style="background:var(--accent);color:#fff;border-radius:8px;padding:8px 14px;font-family:'DM Serif Display',serif;font-size:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>
           <div>
             <div style="font-weight:600;font-size:14px;">Professional Services</div>
             <div style="font-size:12px;color:var(--text3);">Agency, consulting, freelance — hourly or project billing</div>
@@ -1463,7 +1463,7 @@
     <div class="card-body">
       <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">All data is stored locally in your browser. Clearing will permanently delete all transactions, assets and user data.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="resyncTransactions()">🔄 Re-sync Transactions to Supabase</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="resyncTransactions()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> Re-sync Transactions to Supabase</button>
         <button class="btn btn-danger btn-sm" onclick="confirmClearData()">Clear All Data</button>
       </div>
       <div id="resync-status" style="display:none;margin-top:10px;font-size:12px;color:var(--text2);"></div>
@@ -1477,7 +1477,7 @@
 
   <!-- Sub-nav -->
   <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
-    <button class="recon-tab active" onclick="showReconTab('accounts')" id="rtab-accounts" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🏦 Bank Accounts</button>
+    <button class="recon-tab active" onclick="showReconTab('accounts')" id="rtab-accounts" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg> Bank Accounts</button>
     <button class="recon-tab" onclick="showReconTab('import')" id="rtab-import" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">⬆ Import Statement</button>
     <button class="recon-tab" onclick="showReconTab('match')" id="rtab-match" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">✓ Match & Reconcile</button>
   </div>
@@ -1606,7 +1606,7 @@
           <div style="margin-bottom:16px;"><strong>NAB:</strong> Accounts → Transaction History → Download → CSV</div>
           <div style="margin-bottom:16px;"><strong>Westpac:</strong> Accounts → Export → Spreadsheet (.csv)</div>
           <div style="padding:12px 14px;background:var(--surface2);border-radius:8px;font-size:12px;">
-            💡 If auto-detect fails, select your bank format manually and try again. For other banks use Generic format and make sure columns are: Date, Description, Amount.
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8" stroke-width="2.5"/></svg> If auto-detect fails, select your bank format manually and try again. For other banks use Generic format and make sure columns are: Date, Description, Amount.
           </div>
         </div>
       </div>
@@ -1634,7 +1634,7 @@
 
     <!-- Empty state -->
     <div id="match-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
-      <div style="font-size:32px;margin-bottom:12px;">✓</div>
+      <div class="modal-icon modal-icon-green" style="margin-bottom:16px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
       <div style="font-size:15px;font-weight:500;color:var(--text2);">All caught up!</div>
       <div style="font-size:13px;margin-top:6px;">No unmatched transactions. Import a new statement or change the filter.</div>
     </div>
@@ -1648,9 +1648,9 @@
 
   <!-- Sub-nav -->
   <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
-    <button class="inv-tab active" onclick="showInvTab('list')"     id="itab-list"     style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🧾 Invoices</button>
+    <button class="inv-tab active" onclick="showInvTab('list')"     id="itab-list"     style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Invoices</button>
     <button class="inv-tab"        onclick="showInvTab('contacts')" id="itab-contacts"  style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">👤 Contacts</button>
-    <button class="inv-tab"        onclick="showInvTab('editor')"   id="itab-editor"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">✏ New Invoice</button>
+    <button class="inv-tab"        onclick="showInvTab('editor')"   id="itab-editor"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> New Invoice</button>
   </div>
 
   <!-- ── INVOICE LIST ── -->
@@ -1681,7 +1681,7 @@
           </table>
         </div>
         <div id="inv-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
-          <div style="font-size:32px;margin-bottom:12px;">🧾</div>
+          <div style="font-size:32px;margin-bottom:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
           <div style="font-size:15px;font-weight:500;color:var(--text2);">No invoices yet</div>
           <div style="font-size:13px;margin-top:6px;">Create your first invoice to get started.</div>
           <button class="btn btn-primary mt" onclick="newInvoice()">+ Create Invoice</button>
@@ -1909,7 +1909,7 @@
 
   <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
     <button class="bill-tab active" onclick="showBillTab('list')"   id="btab-list"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">📥 Bills</button>
-    <button class="bill-tab"        onclick="showBillTab('editor')" id="btab-editor" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">✏ New Bill</button>
+    <button class="bill-tab"        onclick="showBillTab('editor')" id="btab-editor" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> New Bill</button>
   </div>
 
   <!-- List -->
@@ -2080,7 +2080,7 @@
     </div>
     <div class="flex-gap" style="justify-content:flex-end;">
       <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="closeModal('mark-bill-paid-modal')">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="confirmBillPaid()">✓ Mark Paid & Save Transaction</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmBillPaid()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Mark Paid & Save Transaction</button>
     </div>
   </div>
 </div>
@@ -2089,8 +2089,8 @@
 <div id="assets-page" class="page">
 
   <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
-    <button class="asset-tab active" onclick="showAssetTab('register')"    id="atab-register"    style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🏗 Register</button>
-    <button class="asset-tab"        onclick="showAssetTab('depreciation')" id="atab-depreciation" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">📉 Depreciation</button>
+    <button class="asset-tab active" onclick="showAssetTab('register')"    id="atab-register"    style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> Register</button>
+    <button class="asset-tab"        onclick="showAssetTab('depreciation')" id="atab-depreciation" style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> Depreciation</button>
     <button class="asset-tab"        onclick="showAssetTab('add')"          id="atab-add"          style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">+ Add Asset</button>
   </div>
 
@@ -2110,7 +2110,7 @@
           </table>
         </div>
         <div id="asset-register-empty" style="display:none;padding:48px;text-align:center;color:var(--text3);">
-          <div style="font-size:32px;margin-bottom:12px;">🏗</div>
+          <div style="font-size:32px;margin-bottom:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
           <div style="font-size:15px;font-weight:500;color:var(--text2);">No assets registered yet</div>
           <button class="btn btn-primary mt" onclick="showAssetTab('add')">+ Add First Asset</button>
         </div>
@@ -2274,8 +2274,8 @@
 
   <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;background:var(--surface);border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;">
     <button class="rcpt-tab active" onclick="showReceiptTab('upload')"  id="rtab-upload"  style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">📷 Upload Receipt</button>
-    <button class="rcpt-tab"        onclick="showReceiptTab('list')"    id="rtab-list"    style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">🗂 All Receipts</button>
-    <button class="rcpt-tab"        onclick="showReceiptTab('petty')"   id="rtab-petty"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;">💵 Petty Cash</button>
+    <button class="rcpt-tab"        onclick="showReceiptTab('list')"    id="rtab-list"    style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> All Receipts</button>
+    <button class="rcpt-tab"        onclick="showReceiptTab('petty')"   id="rtab-petty"   style="padding:12px 20px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Petty Cash</button>
   </div>
 
   <!-- ── UPLOAD TAB ── -->
@@ -2383,8 +2383,8 @@
               <label>Category</label>
               <select id="rcpt-type">
                 <option value="bill">📥 Create Bill (Accounts Payable)</option>
-                <option value="transaction">💳 Create Transaction (direct)</option>
-                <option value="petty">💵 Petty Cash Expense</option>
+                <option value="transaction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Create Transaction (direct)</option>
+                <option value="petty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Petty Cash Expense</option>
               </select>
             </div>
             <div class="form-group" id="rcpt-payment-account-group">
@@ -2401,7 +2401,7 @@
 
           <div style="display:flex;gap:10px;margin-top:20px;">
             <button class="btn btn-ghost btn-sm" style="color:var(--text);" onclick="resetReceiptUpload()">← Start Over</button>
-            <button class="btn btn-accent" style="flex:1;" onclick="saveReceiptEntry()">✓ Save Entry</button>
+            <button class="btn btn-accent" style="flex:1;" onclick="saveReceiptEntry()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Entry</button>
           </div>
         </div>
       </div>
@@ -3592,6 +3592,7 @@
 
 <div id="toast"></div>
 
+<script src="icons.js"></script>
 <script src="db.js"></script>
 <script src="app.js"></script>
 <script src="bills.js"></script>
