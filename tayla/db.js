@@ -108,10 +108,10 @@ async function _fetchFromSupabase() {
     const [txRes, jRes, aRes, lRes, swRes] = await Promise.all([
       _supabase
         .from('transactions')
-        .select('id,date,desc:description,amount,type,account,gst,debits,credits,notes,created_at,source')
+        .select('id,date,description,amount,type,account,gst,debits,credits,notes,created_at,source')
         .eq('business_id', _businessId)
         .order('date', { ascending: false })
-        .limit(500), // cap for performance — add pagination if needed
+        .limit(500),
 
       _supabase
         .from('journals')
@@ -139,9 +139,10 @@ async function _fetchFromSupabase() {
     const errors = [txRes, jRes, aRes, lRes, swRes].map(r => r.error).filter(Boolean);
     if (errors.length) throw errors[0];
 
-    // Remap and normalise transactions
-    const txData = (txRes.data || []).map(({ debits, credits, ...rest }) => ({
+    // Remap description → desc for app compatibility, parse debits/credits
+    const txData = (txRes.data || []).map(({ description, debits, credits, ...rest }) => ({
       ...rest,
+      desc: description,
       debits:  typeof debits  === 'string' ? JSON.parse(debits)  : (debits  || []),
       credits: typeof credits === 'string' ? JSON.parse(credits) : (credits || []),
     }));
